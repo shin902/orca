@@ -121,7 +121,7 @@ export function connectThemeDaemon(publish: (update: ThemeUpdate) => void): () =
           return
         }
         received = false
-        socket?.send(JSON.stringify({ type: 'ping' }))
+        socket?.send('ping')
         void syncWallpaper()
       }, 20_000)
     })

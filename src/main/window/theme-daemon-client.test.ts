@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { connectThemeDaemon } from './theme-daemon-client'
 
 const sockets = vi.hoisted(() => {
-  const instances: EventEmitter[] = []
+  const instances: (EventEmitter & { send: ReturnType<typeof vi.fn> })[] = []
   return instances
 })
 vi.mock('ws', () => ({
@@ -135,6 +135,18 @@ describe('local theme daemon', () => {
       expect.any(URL),
       expect.objectContaining({ redirect: 'error' })
     )
+  })
+
+  it('keeps the connection after a plaintext pong replies to the 20-second ping', async () => {
+    vi.useFakeTimers()
+    mockThemeFetch()
+    const { publish, socket } = start()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(socket.send).toHaveBeenCalledWith('ping')
+    socket.emit('message', Buffer.from('pong'))
+    await vi.advanceTimersByTimeAsync(25_000)
+    expect(sockets).toHaveLength(1)
+    expect(publish).not.toHaveBeenCalledWith({ status: 'unavailable' })
   })
 
   it('reconnects and cancels timers and downloads when stopped', async () => {
