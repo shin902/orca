@@ -33,6 +33,14 @@ export const getManageSessionsSearchEntries = createLocalizedCatalog(() => [
 
 export const getTerminalWindowSearchEntries = createLocalizedCatalog(() => [
   {
+    title: translate('settings.desktopBackground.title', 'Desktop background'),
+    description: translate(
+      'settings.desktopBackground.description',
+      'Use the shared wallpaper, see through the window, or turn transparency off.'
+    ),
+    keywords: ['wallpaper', 'theme', 'background', 'transparency', 'daemon']
+  },
+  {
     title: translate('auto.components.settings.terminal.search.b36fd2416d', 'Background Opacity'),
     description: translate(
       'auto.components.settings.terminal.search.4c643695aa',

@@ -31,6 +31,10 @@ import {
 import { installMainWindowWebviewSecurity } from './main-window-webview-security'
 import { rectHasVisibleAreaOnAnyDisplay } from './window-bounds-validation'
 import { installWindowsPathRegistryChangeListener } from '../pty/windows-path-registry-change'
+import {
+  desktopBackgroundWindowOptions,
+  installDesktopBackground
+} from './desktop-background-window'
 
 export { WINDOW_QUIT_RENDERER_ACK_TIMEOUT_MS }
 
@@ -91,10 +95,11 @@ export function createMainWindow(
     return false
   })
   const blur = settings?.windowBackgroundBlur ?? false
-  // Why: only Windows acrylic is ever visible; macOS vibrancy+transparent sat behind our opaque background yet
-  // forced per-frame WindowServer alpha compositing (#8482). Applies at creation only, so it needs a restart.
+  // Keep ordinary macOS windows opaque (#8482); native transparency is a separate opt-in.
   const platformBlurOptions =
-    blur && process.platform === 'win32' ? { backgroundMaterial: 'acrylic' as const } : {}
+    blur && process.platform === 'win32' && settings?.backgroundMode !== 'transparent'
+      ? { backgroundMaterial: 'acrylic' as const }
+      : {}
 
   const mainWindow = new BrowserWindow({
     width: savedBounds?.width ?? defaultBounds.width,
@@ -129,6 +134,7 @@ export function createMainWindow(
       : {}),
     icon: getAppIconPath(settings?.appIcon),
     ...platformBlurOptions,
+    ...desktopBackgroundWindowOptions(settings?.backgroundMode),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -139,6 +145,11 @@ export function createMainWindow(
       additionalArguments: [formatBrowserClientHostIdArgument(getBrowserClientHostId())]
     }
   })
+  const disposeDesktopBackground = installDesktopBackground(
+    mainWindow,
+    store,
+    settings?.backgroundMode === 'transparent'
+  )
   const rendererWebContentsId = mainWindow.webContents.id
   installWindowsPathRegistryChangeListener(mainWindow)
   // Why: native paste fallback is privileged IPC; only the top-level renderer may request it.
@@ -211,8 +222,8 @@ export function createMainWindow(
     powerMonitor.removeListener('resume', onSystemResume)
     clearTrustedUIRendererWebContentsId(rendererWebContentsId)
     state.dispose()
+    disposeDesktopBackground()
   })
-
   if (!opts?.deferLoad) {
     loadMainWindow(mainWindow)
   }

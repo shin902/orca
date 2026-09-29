@@ -1,0 +1,38 @@
+/* One tint layer avoids compounding opacity through nested workspace surfaces. */
+html[data-desktop-background] {
+  --desktop-terminal-split-background: transparent;
+}
+
+html[data-desktop-background] body {
+  background: transparent;
+}
+
+html[data-desktop-background] .app-layout {
+  isolation: isolate;
+}
+
+.desktop-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center;
+}
+
+.desktop-background-shade {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+}
+
+/* Keep popovers, dialogs, editors and browser guests opaque and readable. */
+html[data-desktop-background]
+  .app-layout
+  :is(.titlebar, .titlebar-left, .bg-worktree-sidebar, .bg-sidebar, .group\/tab-group > .bg-card) {
+  background: transparent;
+}
+
+html[data-desktop-background] .pane-title-bar:not([data-chromeless]) {
+  background: color-mix(in srgb, var(--orca-pane-title-bg, var(--background)) 78%, transparent);
+}

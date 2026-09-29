@@ -31,6 +31,7 @@ import { normalizeTerminalLineHeight } from '../../../../shared/terminal-line-he
 import { maybePushMode2031Flip } from './terminal-mode-2031-replies'
 import { resolveTerminalMinimumContrastRatio } from '@/lib/terminal-contrast-correction'
 import { resolveTerminalInlineImagesEnabled } from '../../../../shared/terminal-inline-images-settings'
+import { resolveTerminalBackgroundOpacity } from '../../../../shared/desktop-background'
 
 export function hexToRgba(hex: string, alpha: number): string {
   let clean = hex.replace('#', '')
@@ -55,7 +56,10 @@ export function composeActiveTerminalTheme(
   baseTheme: ITheme | null,
   settings: Pick<
     GlobalSettings,
-    'terminalColorOverrides' | 'terminalBackgroundOpacity' | 'terminalCursorOpacity'
+    | 'terminalColorOverrides'
+    | 'terminalBackgroundOpacity'
+    | 'terminalCursorOpacity'
+    | 'backgroundMode'
   >
 ): ITheme | null {
   if (!baseTheme) {
@@ -75,11 +79,13 @@ export function composeActiveTerminalTheme(
     theme = { ...theme, ...settings.terminalColorOverrides }
   }
   // Why: convert the hex background to rgba so xterm honors the opacity when allowTransparency is set.
-  if (settings.terminalBackgroundOpacity !== undefined && theme.background) {
-    theme = {
-      ...theme,
-      background: hexToRgba(theme.background, settings.terminalBackgroundOpacity)
-    }
+  const backgroundOpacity = resolveTerminalBackgroundOpacity(settings)
+  if (
+    (settings.terminalBackgroundOpacity !== undefined || backgroundOpacity < 1) &&
+    theme.background &&
+    isHexColor(theme.background)
+  ) {
+    theme = { ...theme, background: hexToRgba(theme.background, backgroundOpacity) }
   }
   // Why hex-only: hexToRgba expects a hex input, so named CSS cursor colors are left untouched.
   if (settings.terminalCursorOpacity !== undefined && theme.cursor && isHexColor(theme.cursor)) {
@@ -178,8 +184,7 @@ export function applyTerminalAppearance(
       pane.terminal.options.minimumContrastRatio = minimumContrastRatio
     }
     // Why clear explicitly: allowTransparency has rendering cost and a stale `true` could bleed in from a prior opacity.
-    pane.terminal.options.allowTransparency =
-      settings.terminalBackgroundOpacity !== undefined && settings.terminalBackgroundOpacity < 1
+    pane.terminal.options.allowTransparency = resolveTerminalBackgroundOpacity(settings) < 1
     const cursorStyle = settings.terminalCursorStyle ?? 'block'
     pane.terminal.options.cursorStyle = cursorStyle
     pane.terminal.options.cursorInactiveStyle = resolveTerminalCursorInactiveStyle(cursorStyle)
@@ -240,7 +245,7 @@ export function applyTerminalAppearance(
   }
 
   manager.setPaneStyleOptions({
-    splitBackground: paneBackground,
+    splitBackground: `var(--desktop-terminal-split-background, ${paneBackground})`,
     paneBackground,
     inactivePaneOpacity: paneStyles.inactivePaneOpacity,
     activePaneOpacity: paneStyles.activePaneOpacity,

@@ -3,6 +3,7 @@ import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { DashboardCardTerminalInput } from '../../../../shared/dashboard-snapshot'
 import { resolveTerminalFontWeights } from '../../../../shared/terminal-fonts'
 import { normalizeTerminalLineHeight } from '../../../../shared/terminal-line-height-settings'
+import { resolveTerminalBackgroundOpacity } from '../../../../shared/desktop-background'
 import {
   buildDefaultTerminalOptions,
   normalizeTerminalFastScrollSensitivity,
@@ -40,8 +41,7 @@ export function buildPreviewAppearanceOptions(
     // Why only 'true': 'left'/'right' are handled by the keydown policy, which needs Option composable at the xterm level.
     macOptionIsMeta,
     // Why: xterm renders an alpha background opaque unless transparency is on (matches applyTerminalAppearance).
-    allowTransparency:
-      settings?.terminalBackgroundOpacity !== undefined && settings.terminalBackgroundOpacity < 1
+    allowTransparency: resolveTerminalBackgroundOpacity(settings ?? {}) < 1
   }
 }
 
