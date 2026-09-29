@@ -76,7 +76,12 @@ export function connectThemeDaemon(publish: (update: ThemeUpdate) => void): () =
         pending = false
         const response = await fetchBytes('/v1/theme', 64 * 1024, abort.signal)
         const { theme } = themeResponseSchema.parse(JSON.parse(response.bytes.toString('utf8')))
-        if (!theme || theme.revision === lastRevision) {
+        if (!theme) {
+          lastRevision = undefined
+          publish({ wallpaper: null, status: 'connected' })
+          continue
+        }
+        if (theme.revision === lastRevision) {
           publish({ status: 'connected' })
           continue
         }

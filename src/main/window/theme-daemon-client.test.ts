@@ -85,6 +85,35 @@ describe('local theme daemon', () => {
     expect(publish).toHaveBeenCalledTimes(count)
   })
 
+  it('clears a removed theme and reloads its wallpaper if the same revision returns', async () => {
+    let themePresent = true
+    const fetchMock = vi.fn(async (url: URL) =>
+      url.pathname === '/v1/theme'
+        ? Response.json({
+            theme: themePresent ? { revision: 1, wallpaperUrl: '/v1/wallpaper' } : null
+          })
+        : new Response('wallpaper', { headers: { 'content-type': 'image/png' } })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const { publish, socket } = start()
+    await settle()
+    expect(fetchMock.mock.calls.filter(([url]) => url.pathname === '/v1/wallpaper')).toHaveLength(1)
+
+    themePresent = false
+    socket.emit('message', Buffer.from('{"type":"theme_changed"}'))
+    await settle()
+    expect(publish).toHaveBeenLastCalledWith({ wallpaper: null, status: 'connected' })
+
+    themePresent = true
+    socket.emit('message', Buffer.from('{"type":"wallpaper_changed"}'))
+    await settle()
+    expect(fetchMock.mock.calls.filter(([url]) => url.pathname === '/v1/wallpaper')).toHaveLength(2)
+    expect(publish).toHaveBeenLastCalledWith({
+      wallpaper: 'data:image/png;base64,d2FsbHBhcGVy',
+      status: 'connected'
+    })
+  })
+
   it.each([
     'https://example.com/image.png',
     '//example.com/image.png',
