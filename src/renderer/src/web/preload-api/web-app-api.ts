@@ -8,6 +8,7 @@ import { UI_STORAGE_KEY, writeJson } from './web-storage'
 export function createWebAppApi(): Partial<PreloadApi> {
   return {
     app: {
+      onDesktopBackground: () => () => undefined,
       getIdentity: () =>
         Promise.resolve({
           name: 'Orca',

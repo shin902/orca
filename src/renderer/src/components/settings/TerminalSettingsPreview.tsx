@@ -15,6 +15,7 @@ import { normalizeTerminalLineHeight } from '../../../../shared/terminal-line-he
 import { PREVIEW_BUFFER } from './terminal-preview-content'
 import { SettingsSwitch } from './SettingsFormControls'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import { resolveTerminalBackgroundOpacity } from '../../../../shared/desktop-background'
 import { translate } from '@/i18n/i18n'
 
 // Why: pinned so PREVIEW_BUFFER never wraps; 36 cols fits the 32-char longest line + margin (larger fonts clip, not wrap).
@@ -66,6 +67,7 @@ export function TerminalSettingsPreview({
 
   const effectiveFontFamily = previewFontFamily || settings.terminalFontFamily
   const terminalLineHeight = normalizeTerminalLineHeight(settings.terminalLineHeight)
+  const backgroundOpacity = resolveTerminalBackgroundOpacity(settings)
 
   // Why: lazy-init from the active app theme; after mount the toggle is independent of later app-theme changes.
   const [togglePreviewMode, setTogglePreviewMode] = useState<PreviewMode>(() =>
@@ -103,6 +105,7 @@ export function TerminalSettingsPreview({
     [
       appearance,
       settings.terminalColorOverrides,
+      settings.backgroundMode,
       settings.terminalBackgroundOpacity,
       settings.terminalCursorOpacity
     ]
@@ -138,8 +141,7 @@ export function TerminalSettingsPreview({
       fontWeightBold: weights.fontWeightBold,
       lineHeight: terminalLineHeight,
       theme: composedTheme ?? undefined,
-      allowTransparency:
-        settings.terminalBackgroundOpacity !== undefined && settings.terminalBackgroundOpacity < 1,
+      allowTransparency: backgroundOpacity < 1,
       cols: PREVIEW_COLS,
       rows: PREVIEW_ROWS
     })
@@ -210,8 +212,7 @@ export function TerminalSettingsPreview({
       settings.terminalMinimumContrastRatio
     )
     // Why: xterm renders an alpha-channel background opaque unless allowTransparency is set (matches applyTerminalAppearance).
-    terminal.options.allowTransparency =
-      settings.terminalBackgroundOpacity !== undefined && settings.terminalBackgroundOpacity < 1
+    terminal.options.allowTransparency = backgroundOpacity < 1
     if (skipInitialThemeRewriteRef.current) {
       skipInitialThemeRewriteRef.current = false
       return
@@ -219,12 +220,7 @@ export function TerminalSettingsPreview({
     // Why reset() not clear(): buffer ends mid-line on the prompt, so clear()+write would duplicate the trailing fragment.
     terminal.reset()
     terminal.write(PREVIEW_BUFFER)
-  }, [
-    composedTheme,
-    effectiveMode,
-    settings.terminalBackgroundOpacity,
-    settings.terminalMinimumContrastRatio
-  ])
+  }, [composedTheme, effectiveMode, backgroundOpacity, settings.terminalMinimumContrastRatio])
 
   useEffect(() => {
     const terminal = terminalRef.current

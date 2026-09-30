@@ -13,6 +13,15 @@ import { awaitBeforeUnloadCheckpoint, startupDiagnosticsEnabled } from '../prelo
 import type { PreloadApi } from '../api-types'
 
 export const appApi = {
+  onDesktopBackground: (callback: Parameters<PreloadApi['app']['onDesktopBackground']>[0]) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      background: Parameters<typeof callback>[0]
+    ): void => callback(background)
+    ipcRenderer.on('desktop-background:changed', listener)
+    ipcRenderer.send('desktop-background:subscribe')
+    return () => ipcRenderer.removeListener('desktop-background:changed', listener)
+  },
   getIdentity: (): Promise<AppIdentity> => ipcRenderer.invoke('app:getIdentity'),
   getFeatureWallAssetBaseUrl: (): Promise<string> =>
     ipcRenderer.invoke('app:getFeatureWallAssetBaseUrl'),

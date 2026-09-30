@@ -11,6 +11,7 @@ import RunningTerminalCloseDialog from './components/terminal-pane/RunningTermin
 import WorktreeBaseFallbackDialog from './components/WorktreeBaseFallbackDialog'
 import { useUnreadDockBadge } from './hooks/useUnreadDockBadge'
 import { AppBackgroundServices } from './app-shell/AppBackgroundServices'
+import { DesktopBackground } from './app-shell/DesktopBackground'
 import { AppRootSurfaces } from './app-shell/AppRootSurfaces'
 import { AppWorkspaceShell } from './app-shell/AppWorkspaceShell'
 import { WindowControls } from './app-shell/WindowControls'
@@ -89,6 +90,7 @@ function App(): React.JSX.Element {
         } as React.CSSProperties
       }
     >
+      <DesktopBackground />
       <TooltipProvider delayDuration={400}>
         <ConfirmationDialogProvider>
           <DocPreviewExternalLinkConfirmation />

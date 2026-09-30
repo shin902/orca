@@ -16,6 +16,8 @@ type TerminalWindowSectionProps = {
 }
 
 import { COLOR_OVERRIDE_GROUPS } from './terminal-window-color-groups'
+import { DesktopBackgroundSettings } from './DesktopBackgroundSettings'
+import { resolveTerminalBackgroundOpacity } from '../../../../shared/desktop-background'
 
 export function TerminalWindowSection({
   settings,
@@ -61,6 +63,7 @@ export function TerminalWindowSection({
       </div>
 
       <div className="ml-4 space-y-4">
+        <DesktopBackgroundSettings settings={settings} updateSettings={updateSettings} />
         <SearchableSetting
           title={translate(
             'auto.components.settings.TerminalWindowSection.ea7b1a158e',
@@ -81,8 +84,10 @@ export function TerminalWindowSection({
               'auto.components.settings.TerminalWindowSection.809f37738d',
               'Controls the transparency of the terminal background. 1 is fully opaque, 0 is fully transparent.'
             )}
-            value={settings.terminalBackgroundOpacity ?? 1}
-            defaultValue={1}
+            value={resolveTerminalBackgroundOpacity(settings)}
+            defaultValue={resolveTerminalBackgroundOpacity({
+              backgroundMode: settings.backgroundMode
+            })}
             min={0}
             max={1}
             step={0.05}
