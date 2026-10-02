@@ -830,11 +830,12 @@ jobs:
     if: needs.code_paths.outputs.cross-version-wire == 'true'
     # Why ARM: source-only: tagged checkout plus in-process vitest, no docker or browser.
     runs-on: ubuntu-24.04-arm
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.218
 
     steps:
-      # Why fetch-depth 0: the harness extracts the newest release tag to skew
-      # current code against it. The default shallow clone has no tags, which is
-      # why this cannot ride along in the sharded `test` job.
+      # Keep the full graph for release extraction; a shallow clone omits fixture commits.
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -844,6 +845,17 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+
+      # Forks do not inherit upstream tags; fetch only the releases this harness compares.
+      - name: Fetch official compatibility releases
+        run: |
+          git fetch --no-tags --filter=blob:none https://github.com/stablyai/orca.git \
+            "refs/tags/$ORCA_CROSS_VERSION_BASELINE_REF:refs/tags/$ORCA_CROSS_VERSION_BASELINE_REF" \
+            refs/tags/v1.4.184:refs/tags/v1.4.184 \
+            refs/tags/v1.4.190:refs/tags/v1.4.190 \
+            refs/tags/v1.4.199:refs/tags/v1.4.199 \
+            refs/tags/v1.4.211:refs/tags/v1.4.211 \
+            refs/tags/v1.4.212:refs/tags/v1.4.212
 
       - uses: ./.github/actions/install-node-dependencies
         with:

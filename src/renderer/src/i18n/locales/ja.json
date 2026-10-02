@@ -12,6 +12,7 @@
   },
   "settings": {
     "desktopBackground": {
+      "wallpaperKeyword": "壁紙",
       "title": "デスクトップ背景",
       "description": "共通の壁紙、ウィンドウの透過、透過なしを切り替えます。",
       "solid": "単色（透過オフ）",

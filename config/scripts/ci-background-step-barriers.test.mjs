@@ -59,11 +59,14 @@ describe('CI background step barriers', () => {
 
   it('finishes both mobile typechecks before allocating test workers', () => {
     const steps = mobile.jobs.verify.steps
-    assertJoinedBefore(steps, 'production-types', (step) => step.name === 'Test')
+    const production = steps.findIndex((step) => step.name === 'Typecheck')
     const ratchet = steps.findIndex((step) => step.name === 'Typecheck tests (ratchet)')
-    const join = steps.findIndex((step) => step.wait === 'production-types')
+    const test = steps.findIndex((step) => step.name === 'Test')
+    expect(production).toBeGreaterThanOrEqual(0)
+    expect(steps[production].background).toBeUndefined()
     expect(steps[ratchet].background).toBeUndefined()
-    expect(ratchet).toBeLessThan(join)
+    expect(ratchet).toBeGreaterThan(production)
+    expect(test).toBeGreaterThan(ratchet)
   })
 
   it('waits for WebKit and the bundle before any browser tests', () => {

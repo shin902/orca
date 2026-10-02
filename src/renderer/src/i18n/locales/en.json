@@ -210,6 +210,7 @@
       }
     },
     "desktopBackground": {
+      "wallpaperKeyword": "wallpaper",
       "title": "Desktop background",
       "description": "Use the shared wallpaper, see through the window, or turn transparency off.",
       "solid": "Solid (transparency off)",
