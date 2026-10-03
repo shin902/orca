@@ -166,6 +166,20 @@ describe('local theme daemon', () => {
     )
   })
 
+  it('cancels an unread error response from the daemon', async () => {
+    const cancel = vi.fn()
+    const response = new Response(new ReadableStream({ cancel }), { status: 503 })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response)
+    )
+    const { publish } = start()
+    await settle()
+    expect(publish).toHaveBeenLastCalledWith({ status: 'unavailable' })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(response.body?.locked).toBe(false)
+  })
+
   it('keeps the connection after a plaintext pong replies to the 20-second ping', async () => {
     vi.useFakeTimers()
     mockThemeFetch()

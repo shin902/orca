@@ -10,28 +10,18 @@ const workflow = parse(
   readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
 )
 
-it('keeps full ancestry and credentials for lazy pinned-tree reads', () => {
-  const job = workflow.jobs['recording-pin']
+it('runs the full mobile suite on pushes without pinned-tree credentials', () => {
+  const job = workflow.jobs['main-tests']
   const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'))
-  expect(checkout.with['fetch-depth']).toBe(0)
-  expect(checkout.with.filter).toBe('blob:none')
-  expect(checkout.with['persist-credentials']).not.toBe(false)
-  expect(job.if).toBeUndefined()
+  expect(checkout.with['persist-credentials']).toBe(false)
+  expect(job.if).toBe("github.event_name == 'push'")
   expect(workflow.on.push.branches).toEqual(['main'])
   expect(workflow.concurrency.group).toContain('github.sha')
-  const reachable = job.steps.find((step) => step.name === 'Check the recording pin is reachable')
-  expect(reachable.run).toBe('pnpm exec tsx scripts/rpc-recording-pin-guard.mts reachable')
-  const reproduce = job.steps.find(
-    (step) => step.name === 'Reproduce the corpus from the pinned tree'
-  )
-  // Both steps ask GitHub which pull requests hold a pin main's history lacks.
-  expect(job.permissions).toEqual({ contents: 'read', 'pull-requests': 'read' })
-  expect(reachable.env.GITHUB_TOKEN).toContain('github.token')
-  expect(reproduce.env.GITHUB_TOKEN).toContain('github.token')
-  expect(reproduce.run).toContain('reproduce --if-changed-since "$PIN_GUARD_BASE"')
-  expect(reproduce.run).toContain(
-    'else\n  pnpm exec tsx scripts/rpc-recording-pin-guard.mts reproduce\nfi'
-  )
+  const test = job.steps.find((step) => step.name === 'Test')
+  expect(test.run).toBe('pnpm test')
+  expect(test.if).toBeUndefined()
+  expect(test.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
+  expect(workflow.jobs['recording-pin']).toBeUndefined()
 })
 
 it('retains ancestry while fetching a missing pinned blob for a detached worktree', () => {
