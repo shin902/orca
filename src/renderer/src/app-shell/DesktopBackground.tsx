@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { useAppStore } from '../store'
 import { useDesktopBackground } from './use-desktop-background'
 import { resolveBackgroundMode, resolveBackgroundOpacity } from '../../../shared/desktop-background'
-import '../assets/desktop-background.css'
 
 export function DesktopBackground(): React.JSX.Element | null {
   const mode = useAppStore((state) => resolveBackgroundMode(state.settings?.backgroundMode))

@@ -38,7 +38,19 @@ export const getTerminalWindowSearchEntries = createLocalizedCatalog(() => [
       'settings.desktopBackground.description',
       'Use the shared wallpaper, see through the window, or turn transparency off.'
     ),
-    keywords: ['wallpaper', 'theme', 'background', 'transparency', 'daemon']
+    keywords: [
+      ...translateSearchKeyword('settings.desktopBackground.wallpaperKeyword', 'wallpaper'),
+      ...translateSearchKeyword('auto.components.settings.terminal.search.0ce176909a', 'theme'),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.f6dd9ff606',
+        'background'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.4f7f8f28ca',
+        'transparency'
+      ),
+      ...translateSearchKeyword('auto.components.settings.terminal.search.f35400f7e8', 'daemon')
+    ]
   },
   {
     title: translate('auto.components.settings.terminal.search.b36fd2416d', 'Background Opacity'),

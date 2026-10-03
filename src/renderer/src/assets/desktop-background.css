@@ -11,7 +11,7 @@ html[data-desktop-background] .app-layout {
   isolation: isolate;
 }
 
-.desktop-background {
+@utility desktop-background {
   position: fixed;
   inset: 0;
   z-index: -1;
@@ -20,7 +20,7 @@ html[data-desktop-background] .app-layout {
   background-position: center;
 }
 
-.desktop-background-shade {
+@utility desktop-background-shade {
   position: absolute;
   inset: 0;
   background: var(--background);

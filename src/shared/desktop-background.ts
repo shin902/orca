@@ -24,7 +24,12 @@ export function resolveBackgroundOpacity(value: unknown): number {
     : 0.78
 }
 
-export function normalizeDesktopBackgroundUpdate(update: object) {
+type DesktopBackgroundUpdate = {
+  backgroundMode?: unknown
+  backgroundOpacity?: unknown
+}
+
+export function normalizeDesktopBackgroundUpdate(update: DesktopBackgroundUpdate) {
   return {
     ...('backgroundMode' in update
       ? { backgroundMode: resolveBackgroundMode(update.backgroundMode) }
