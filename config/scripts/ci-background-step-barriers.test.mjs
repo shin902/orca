@@ -20,6 +20,7 @@ describe('CI background step barriers', () => {
   it('joins every background check without suppressing failures', () => {
     for (const job of [
       pr.jobs.static_analysis,
+      pr.jobs.typecheck,
       pr.jobs.mobile_web_app,
       pr.jobs.package,
       pr.jobs.shell_contracts,
@@ -47,6 +48,14 @@ describe('CI background step barriers', () => {
     }
   })
 
+  it('joins planning before publishing the unit artifact', () => {
+    assertJoinedBefore(
+      pr.jobs.typecheck.steps,
+      'unit-plan',
+      (step) => step.uses === 'actions/upload-artifact@v7'
+    )
+  })
+
   it('finishes native import-cycle analysis before mobile installation changes resolution', () => {
     const steps = pr.jobs.static_analysis.steps
     assertJoinedBefore(steps, 'native-code-quality', (step) =>
@@ -59,14 +68,11 @@ describe('CI background step barriers', () => {
 
   it('finishes both mobile typechecks before allocating test workers', () => {
     const steps = mobile.jobs.verify.steps
-    const production = steps.findIndex((step) => step.name === 'Typecheck')
+    assertJoinedBefore(steps, 'production-types', (step) => step.name === 'Test')
     const ratchet = steps.findIndex((step) => step.name === 'Typecheck tests (ratchet)')
-    const test = steps.findIndex((step) => step.name === 'Test')
-    expect(production).toBeGreaterThanOrEqual(0)
-    expect(steps[production].background).toBeUndefined()
+    const join = steps.findIndex((step) => step.wait === 'production-types')
     expect(steps[ratchet].background).toBeUndefined()
-    expect(ratchet).toBeGreaterThan(production)
-    expect(test).toBeGreaterThan(ratchet)
+    expect(join).toBeLessThan(ratchet)
   })
 
   it('waits for WebKit and the bundle before any browser tests', () => {

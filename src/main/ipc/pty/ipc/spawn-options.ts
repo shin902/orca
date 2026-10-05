@@ -26,6 +26,7 @@ import { resolveConfiguredTerminalShellArgs } from '../configured-terminal-shell
 import { withCodexTerminalServerIsolationEnv } from '../../../../shared/codex-terminal-server-isolation'
 import { planCodexNoDaemonLaunch } from '../../../pty/codex-no-daemon-launch-command'
 import type { PtyIpcSpawnState } from './spawn-state'
+import { applyAgentWorkspaceTrustToSpawn } from '../../../agent-workspace-trust-spawn'
 
 /** Carries deletions to provider-owned environments, including persistent older daemons. */
 export async function buildPtyIpcSpawnOptions(
@@ -104,6 +105,22 @@ export async function buildPtyIpcSpawnOptions(
   }
   if (args.worktreeId !== undefined) {
     ctx.spawnOptions.worktreeId = args.worktreeId
+  }
+  const trustWrite = applyAgentWorkspaceTrustToSpawn({
+    launchAgent: args.launchAgent,
+    worktreeId: args.worktreeId,
+    cwd: ctx.cwd,
+    store: ctx.deps.store,
+    isFreshLaunch: !ctx.preAdoptedStablePane && ctx.launchCommand !== undefined,
+    settings: ctx.deps.getSettings?.(),
+    env: ctx.spawnEnv,
+    claudeAuth: ctx.claudeAuth,
+    wslDistro: ctx.expectedWslDistro,
+    connectionId: args.connectionId ?? null,
+    spawnOptions: ctx.spawnOptions
+  })
+  if (trustWrite) {
+    await trustWrite
   }
   if (ctx.reservationPaneKey) {
     ctx.spawnOptions.paneKey = ctx.reservationPaneKey
