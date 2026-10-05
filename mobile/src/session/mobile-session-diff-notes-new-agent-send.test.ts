@@ -1,4 +1,4 @@
-import { createElement, useRef, useState } from 'react'
+import { createElement, useLayoutEffect, useRef, useState } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DiffComment } from '../../../src/shared/diff-comment-types'
@@ -104,7 +104,9 @@ async function mountSessionScreen(client: RpcClient): Promise<void> {
   function Harness() {
     const [diffComments, setDiffComments] = useState<DiffComment[]>([NOTE])
     const diffCommentsRef = useRef(diffComments)
-    diffCommentsRef.current = diffComments
+    useLayoutEffect(() => {
+      diffCommentsRef.current = diffComments
+    }, [diffComments])
     const [diffCommentBusy, setDiffCommentBusy] = useState(false)
     const [pendingDiffNotesDelivery, setPendingDiffNotesDelivery] =
       useState<DiffNotesDelivery | null>(null)

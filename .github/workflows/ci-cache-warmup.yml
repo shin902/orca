@@ -78,10 +78,6 @@ jobs:
           cache-electron-package: 'true'
           cache-pnpm-store-lookup-only: 'true'
 
-      - uses: ./.github/actions/prepare-headless-compiler
-        with:
-          seed: 'true'
-
       - name: Populate shared Electron archive
         run: node config/scripts/install-electron-package-binary.mjs
 

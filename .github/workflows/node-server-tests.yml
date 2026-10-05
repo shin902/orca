@@ -114,12 +114,8 @@ jobs:
             echo 'should_run=true' >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: ./.github/actions/prepare-headless-compiler
-        id: compiler
-        if: steps.scope.outputs.graph_required == 'true'
-        continue-on-error: true
       - uses: ./.github/actions/install-node-dependencies
-        if: steps.scope.outputs.graph_required == 'true' && steps.compiler.outputs.available != 'true'
+        if: steps.scope.outputs.graph_required == 'true'
       - name: Check the headless import graph
         id: graph
         if: steps.scope.outputs.graph_required == 'true'

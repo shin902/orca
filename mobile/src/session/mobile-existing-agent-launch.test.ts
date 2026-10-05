@@ -106,7 +106,7 @@ describe('reserveMobileAgentLaunch', () => {
   it('sends the pane and chat it reserved as the launch params', async () => {
     const { client, sendRequest } = scriptedClient(launched({}))
     const reservation = reserveMobileAgentLaunch('claude')
-    await launch(client, { reservation, mintOperationId: () => '1790000000000-' + 'a'.repeat(32) })
+    await launch(client, { reservation, mintOperationId: () => `1790000000000-${'a'.repeat(32)}` })
     const params = sendRequest.mock.calls[0]![1]
 
     expect(params).toMatchObject({
