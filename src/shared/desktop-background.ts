@@ -1,5 +1,10 @@
 export type BackgroundMode = 'solid' | 'image' | 'transparent'
 
+export type DesktopBackgroundSettings = {
+  backgroundMode?: BackgroundMode
+  backgroundOpacity?: number
+}
+
 export type DesktopBackground = {
   wallpaper: string | null
   enabled: boolean
