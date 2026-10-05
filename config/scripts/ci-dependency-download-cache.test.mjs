@@ -11,7 +11,6 @@ describe('CI dependency download caches', () => {
   it('scopes desktop stores to the root lockfile and lets mixed installs opt in', () => {
     expect(action.inputs['cache-dependency-path'].default).toBe('pnpm-lock.yaml')
     for (const step of action.runs.steps.filter((step) => step.uses === 'actions/setup-node@v6')) {
-      expect(step.with.cache).toBe("${{ github.event_name != 'pull_request' && 'pnpm' || '' }}")
       expect(step.with['cache-dependency-path']).toBe('${{ inputs.cache-dependency-path }}')
       expect(step.with['package-manager-cache']).toBe(false)
     }
@@ -30,15 +29,11 @@ describe('CI dependency download caches', () => {
     ])
   })
 
-  it('restores PR stores except measured Windows mixed installs, without a post-job save', () => {
+  it('keeps PR download stores restore-only and verification writes main-only', () => {
     const resolve = action.runs.steps.find((step) => step.id === 'pnpm-store')
     const restore = action.runs.steps.find(
       (step) => step.name === 'Restore pnpm download store without saving'
     )
-    expect(resolve.if).toBe(
-      "github.event_name == 'pull_request' && (runner.os != 'Windows' || runner.arch != 'X64' || !contains(inputs.cache-dependency-path, 'mobile/pnpm-lock.yaml'))"
-    )
-    expect(restore.if).toBe(resolve.if)
     expect(restore.uses).toBe('actions/cache/restore@v5')
     expect(restore.with.path).toBe('${{ steps.pnpm-store.outputs.path }}')
     expect(restore.with.key).toBe(
@@ -69,37 +64,66 @@ describe('CI dependency download caches', () => {
     ['Windows x64 mixed PR', 'pull_request', 'Windows', 'X64', true, false, ''],
     ['Windows ARM64 mixed PR', 'pull_request', 'Windows', 'ARM64', true, true, ''],
     ['Windows x86 mixed PR', 'pull_request', 'Windows', 'X86', true, true, ''],
-    ['Windows x64 root-only PR', 'pull_request', 'Windows', 'X64', false, true, ''],
+    ['Windows x64 root-only PR', 'pull_request', 'Windows', 'X64', false, false, ''],
+    ['Windows ARM64 root-only PR', 'pull_request', 'Windows', 'ARM64', false, false, ''],
+    ['Linux x64 root-only PR', 'pull_request', 'Linux', 'X64', false, false, ''],
+    ['Linux ARM64 root-only PR', 'pull_request', 'Linux', 'ARM64', false, false, ''],
+    ['macOS ARM64 root-only PR', 'pull_request', 'macOS', 'ARM64', false, false, ''],
     ['Linux x64 mixed PR', 'pull_request', 'Linux', 'X64', true, true, ''],
     ['Linux ARM64 mixed PR', 'pull_request', 'Linux', 'ARM64', true, true, ''],
     ['macOS ARM64 mixed PR', 'pull_request', 'macOS', 'ARM64', true, true, ''],
     ['Windows x64 mixed push', 'push', 'Windows', 'X64', true, false, 'pnpm'],
-    ['Windows x64 mixed manual run', 'workflow_dispatch', 'Windows', 'X64', true, false, 'pnpm']
-  ])('%s keeps its scoped store policy', (_name, event, os, arch, mixed, restore, cache) => {
-    const context = {
-      github: { event_name: event },
-      runner: { os, arch },
-      inputs: {
-        'cache-dependency-path': mixed ? 'pnpm-lock.yaml\nmobile/pnpm-lock.yaml' : 'pnpm-lock.yaml'
-      },
-      contains: (value, search) => value.toLowerCase().includes(search.toLowerCase())
+    ['Windows x64 mixed manual run', 'workflow_dispatch', 'Windows', 'X64', true, false, 'pnpm'],
+    ['PR cache opt-out', 'pull_request', 'Windows', 'ARM64', true, false, '', 'false'],
+    ['push cache opt-out', 'push', 'Linux', 'X64', true, false, '', 'false'],
+    ['push lookup-only', 'push', 'Linux', 'X64', false, false, '', 'true', 'true', true]
+  ])(
+    '%s keeps its scoped store policy',
+    (
+      _name,
+      event,
+      os,
+      arch,
+      mixed,
+      restore,
+      cache,
+      enabled = 'true',
+      lookup = '',
+      resolve = restore
+    ) => {
+      const context = {
+        github: { event_name: event },
+        runner: { os, arch },
+        inputs: {
+          'cache-dependency-path': mixed
+            ? 'pnpm-lock.yaml\nmobile/pnpm-lock.yaml'
+            : 'pnpm-lock.yaml',
+          'cache-pnpm-store': enabled
+        },
+        steps: { 'pnpm-store-mode': { outputs: { 'lookup-only': lookup } } },
+        contains: (value, search) => value.toLowerCase().includes(search.toLowerCase())
+      }
+      const evaluate = (expression) =>
+        runInNewContext(
+          expression
+            .replace(/inputs\.([\w-]+)/g, 'inputs["$1"]')
+            .replace(/steps\.([\w-]+)\.outputs\.([\w-]+)/g, 'steps["$1"].outputs["$2"]'),
+          context
+        )
+      for (const step of action.runs.steps.filter(
+        (step) =>
+          step.id === 'pnpm-store' || step.name === 'Restore pnpm download store without saving'
+      )) {
+        expect(evaluate(step.if)).toBe(step.id === 'pnpm-store' ? resolve : restore)
+      }
+      for (const step of action.runs.steps.filter(
+        (step) => step.uses === 'actions/setup-node@v6'
+      )) {
+        expect(evaluate(step.with.cache.slice(3, -2))).toBe(cache)
+        expect(step.with['package-manager-cache']).toBe(false)
+      }
     }
-    const evaluate = (expression) =>
-      runInNewContext(
-        expression.replaceAll('inputs.cache-dependency-path', 'inputs["cache-dependency-path"]'),
-        context
-      )
-    for (const step of action.runs.steps.filter(
-      (step) =>
-        step.id === 'pnpm-store' || step.name === 'Restore pnpm download store without saving'
-    )) {
-      expect(evaluate(step.if)).toBe(restore)
-    }
-    for (const step of action.runs.steps.filter((step) => step.uses === 'actions/setup-node@v6')) {
-      expect(evaluate(step.with.cache.slice(3, -2))).toBe(cache)
-      expect(step.with['package-manager-cache']).toBe(false)
-    }
-  })
+  )
 
   it('restores Windows packaging downloads from the release cache without a PR upload', () => {
     const packaging = workflow('pr').jobs.package_windows

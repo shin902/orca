@@ -276,7 +276,7 @@ describe('PR workflow parallelism', () => {
     expect(node18Index).toBeLessThan(smokeIndex)
   })
 
-  it('restores the pnpm store before dependency installation', () => {
+  it('sets up pnpm before Node and restores selected stores before installation', () => {
     const steps = dependencyAction.runs.steps
     const pnpmIndex = steps.findIndex((step) => step.name === 'Setup pnpm')
     const nodeIndex = steps.findIndex((step) => step.name === 'Setup Node.js')
@@ -289,12 +289,9 @@ describe('PR workflow parallelism', () => {
     expect(steps[pnpmIndex].uses).toBe('pnpm/setup@v2')
     expect(steps[pnpmIndex].with.version).toBeUndefined()
     expect(steps[pnpmIndex].with.install).toBe(false)
-    const saveOutsidePrs = "${{ github.event_name != 'pull_request' && 'pnpm' || '' }}"
-    expect(steps[nodeIndex].with.cache).toBe(saveOutsidePrs)
     expect(steps[nodeIndex].if).toBe("inputs.node-version == ''")
     expect(steps[requestedNodeIndex].if).toBe("inputs.node-version != ''")
     expect(steps[requestedNodeIndex].with['node-version']).toBe('${{ inputs.node-version }}')
-    expect(steps[requestedNodeIndex].with.cache).toBe(saveOutsidePrs)
     const restoreIndex = steps.findIndex(
       (step) => step.name === 'Restore pnpm download store without saving'
     )
@@ -303,9 +300,6 @@ describe('PR workflow parallelism', () => {
       steps.findIndex((step) => step.name === 'Install dependencies')
     )
     expect(steps[restoreIndex].uses).toBe('actions/cache/restore@v5')
-    expect(steps[restoreIndex].if).toBe(
-      "github.event_name == 'pull_request' && (runner.os != 'Windows' || runner.arch != 'X64' || !contains(inputs.cache-dependency-path, 'mobile/pnpm-lock.yaml'))"
-    )
   })
 
   it('uses the repository package-manager version for every direct pnpm setup', () => {

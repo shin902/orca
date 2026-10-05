@@ -5,8 +5,10 @@ import { parse } from 'yaml'
 
 const action = parse(readFileSync('.github/actions/install-node-dependencies/action.yml', 'utf8'))
 const steps = action.runs.steps
-const resolve = steps.find((step) => step.id === 'verification-cache')
-const restore = steps.find((step) => step.id === 'verification-cache-restore')
+const verification = steps.find((step) => step.id === 'verification-cache')
+const cacheSteps = parse(readFileSync(`${verification.uses}/action.yml`, 'utf8')).runs.steps
+const resolve = cacheSteps.find((step) => step.id === 'verification-cache')
+const restore = cacheSteps.find((step) => step.id === 'verification-cache-restore')
 const install = steps.find((step) => step.name === 'Install dependencies')
 const save = steps.find((step) => step.name === 'Save pnpm verification record on main')
 const evaluate = (expression, context) =>
@@ -31,7 +33,7 @@ describe('pnpm-owned verification record', () => {
       expect(
         evaluate(resolve.if, {
           runner: { os, arch },
-          inputs: { 'cache-pnpm-verification': enabled }
+          inputs: { enabled }
         })
       ).toBe(expected && enabled === 'true')
     }
@@ -44,12 +46,15 @@ describe('pnpm-owned verification record', () => {
     expect(resolve.run).toContain('"$(pnpm cache path)"')
     expect(resolve.run).toContain('lockfile-verified.jsonl')
     expect(resolve.run).toContain('pnpm-verification-v1-%s-%s-%s-%s')
-    expect(resolve.run).toContain('"$RUNNER_OS" "$RUNNER_ARCH" "$(pnpm --version)" "$POLICY_HASH"')
+    expect(resolve.run).toContain('pnpm_version="$(pnpm --version)"')
+    expect(resolve.run).toContain('"$RUNNER_OS" "$RUNNER_ARCH" "$pnpm_version" "$POLICY_HASH"')
     expect(restore.uses).toBe('actions/cache/restore@v5')
     expect(restore.with.path).toBe('${{ steps.verification-cache.outputs.path }}')
     expect(restore.with['restore-keys']).toBeUndefined()
     expect(restore['continue-on-error']).toBe(true)
-    expect(steps.indexOf(restore)).toBeLessThan(steps.indexOf(install))
+    expect(verification.with.enabled).toBe('${{ inputs.cache-pnpm-verification }}')
+    expect(cacheSteps.indexOf(resolve)).toBeLessThan(cacheSteps.indexOf(restore))
+    expect(steps.indexOf(verification)).toBeLessThan(steps.indexOf(install))
     expect(install.if).toBeUndefined()
     expect(install.run).toContain('pnpm install --frozen-lockfile --ignore-scripts')
   })
@@ -64,21 +69,20 @@ describe('pnpm-owned verification record', () => {
     const context = {
       github: { event_name: event, ref },
       steps: {
-        'verification-cache': { outputs: { key: 'a-key' } },
-        'verification-cache-restore': { outputs: { 'cache-hit': 'false' } }
+        'verification-cache': { outputs: { key: 'a-key', 'cache-hit': 'false' } }
       }
     }
     const expression = save.if
       .replaceAll(
-        'steps.verification-cache-restore.outputs.cache-hit',
-        'steps["verification-cache-restore"].outputs["cache-hit"]'
+        'steps.verification-cache.outputs.cache-hit',
+        'steps["verification-cache"].outputs["cache-hit"]'
       )
       .replaceAll('steps.verification-cache.outputs.key', 'steps["verification-cache"].outputs.key')
     expect(evaluate(expression, context)).toBe(expected)
     context.steps['verification-cache'].outputs.key = ''
     expect(evaluate(expression, context)).toBe(false)
     context.steps['verification-cache'].outputs.key = 'a-key'
-    context.steps['verification-cache-restore'].outputs['cache-hit'] = 'true'
+    context.steps['verification-cache'].outputs['cache-hit'] = 'true'
     expect(evaluate(expression, context)).toBe(false)
     expect(save.uses).toBe('actions/cache/save@v5')
     expect(steps.indexOf(save)).toBeGreaterThan(steps.indexOf(install))

@@ -149,7 +149,7 @@ it('keeps every platform job and runs them when detection is skipped or fails', 
   expect(detect.env.PUSH_BASE).toBe('${{ github.event.before }}')
   expect(detect.run).toContain('git fetch --no-tags --depth=1 origin "$PUSH_BASE"')
   expect(detect.run).toContain('git diff --name-only --no-renames -z "$PUSH_BASE" HEAD')
-  expect(detect.run).toContain('node-server-changes" --full-qualification')
+  expect(detect.run).toContain('--full-qualification')
   expect(workflow.on.pull_request.types).toContain('ready_for_review')
   expect(workflow.on.schedule).toHaveLength(1)
   // A pull request may qualify one platform, so the merged commit must re-qualify all six.
@@ -213,11 +213,18 @@ it('runs the Bun and Node cross-runtime tests on Linux against pinned inputs', (
   expect(setupBun.with['bun-version']).toBe('1.4.2')
   const build = steps.find((step) => String(step.run).includes('build-orcad-bun.mjs'))
   expect(build.env.BUN_ORCAD_COMMIT).toMatch(/^[0-9a-f]{40}$/)
-  expect(build.run).toContain('ORCA_BUN_ORCAD_SLOT=')
-  expect(build.run).toContain('BUN_EXECUTABLE=')
-  for (const step of [setupBun, build]) {
-    expect(step.if).toBe("runner.os == 'Linux'")
-  }
+  expect(setupBun.if).toBe("runner.os == 'Linux'")
+  expect(build.run).toContain('if [ "$RUNNER_OS" != Linux ]; then exit 0; fi')
+  expect(build.run).toContain('echo "slot=')
+  expect(build.run).toContain('echo "executable=')
+  const crossRuntime = steps.find((step) =>
+    String(step.run).includes('pnpm test:node-server --artifact')
+  )
+  expect(crossRuntime.env.ORCA_BUN_ORCAD_SLOT).toBe(`\${{ steps.${build.id}.outputs.slot }}`)
+  expect(crossRuntime.env.BUN_EXECUTABLE).toBe(`\${{ steps.${build.id}.outputs.executable }}`)
+  const waitIndex = steps.findIndex((step) => step.wait === build.id)
+  expect(waitIndex).toBeGreaterThanOrEqual(0)
+  expect(waitIndex).toBeLessThan(steps.indexOf(crossRuntime))
   expect(steps.map((step) => step.run).join('\n')).toContain(
     "pnpm test:node-server --artifact ${{ runner.os == 'Linux' && '--cross-runtime' || '' }}"
   )
