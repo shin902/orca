@@ -1,6 +1,8 @@
+import { act } from '@testing-library/react'
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { vi } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import type { AgentSessionBackgroundTask } from '../../../../shared/agent-session-wire'
 import type { AgentSessionWriteRefusal } from '../../../../shared/agent-session-write-failure'
 import type { AgentSessionRefusalReference } from '../../../../shared/agent-session-wire-refusals'
@@ -26,7 +28,8 @@ function absent<T>(): T | undefined {
   return undefined
 }
 
-/** Stands in for the transcript: renders only each message's delivery notice and its Retry. */
+/** Stands in for the transcript: renders only each message's delivery notice and its Retry, or the
+ *  row's quiet "Sending…" while nothing has confirmed it. */
 export function DeliveryNoticesMock({
   notices
 }: {
@@ -36,7 +39,7 @@ export function DeliveryNoticesMock({
     <div data-testid="message-list">
       {[...(notices ?? [])].map(([id, notice]) => (
         <div key={id} data-message-id={id}>
-          <span>{notice.text}</span>
+          <span>{notice.sending ? 'Sending…' : notice.text}</span>
           {notice.onRetry ? (
             <button type="button" onClick={notice.onRetry}>
               Retry
@@ -45,6 +48,43 @@ export function DeliveryNoticesMock({
         </div>
       ))}
     </div>
+  )
+}
+
+export function useProbeClock(): void {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+}
+
+export async function advanceProbeClock(milliseconds: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds)
+  })
+}
+
+export function seededEntry(
+  sessionId: string,
+  clientMessageId: string,
+  text: string,
+  state: 'queued' | 'unconfirmed'
+) {
+  return {
+    clientMessageId,
+    sessionId,
+    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text }] },
+    previewUris: [],
+    state,
+    queuedAt: clientMessageId === 'op-head' ? 1 : 2,
+    lastAttemptAt: null,
+    // Already force-retried once, so the automatic probe leaves the head alone
+    // and only the user's Retry moves it.
+    retryAfterUnknownSubmittedAt: -1
+  }
+}
+
+export function seedOutbox(sessionId: string, entries: unknown[]): void {
+  localStorage.setItem(
+    `orca:desktopStructuredAgentSessionOutbox:v1:${encodeURIComponent(sessionId)}`,
+    JSON.stringify(entries)
   )
 }
 
@@ -74,7 +114,7 @@ export function createStructuredSessionMocks() {
     launchLifecycle: nullable<StructuredAgentSessionLaunchLifecycle>(),
     launchFailure: nullable<AgentSessionWriteRefusal>(),
     launchResumes: false,
-    retryLaunch: vi.fn<(...args: never[]) => unknown>(),
+    retryLaunch: vi.fn<(worktreeId: string, sessionId: string) => unknown>(),
     controllerProps: nullable<{ transportEnabled?: boolean }>(),
     mode: 'static' as 'static' | 'outbox',
     status: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
@@ -112,7 +152,12 @@ export function createStructuredSessionMocks() {
     hasOlder: false,
     loadingOlder: false,
     olderHistoryGeneration: 0,
-    loadOlder: vi.fn<() => Promise<NativeChatOlderPageResult>>()
+    loadOlder: vi.fn<() => Promise<NativeChatOlderPageResult>>(),
+    queuedCards: Array.of<QueuedMessageCard>(),
+    queuedSteer: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
+    queuedRemove: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
+    queuedEdit: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
+    queuedSteerNewest: vi.fn<() => boolean>(() => false)
   }
 
   const moduleFactories = {
@@ -134,6 +179,7 @@ export function createStructuredSessionMocks() {
         }) => {
           mocks.controllerProps = props
           const outbox = useStructuredAgentSessionOutbox({
+            journalItems: mocks.journalItems,
             sessionId: props.sessionId,
             target: props.target,
             fence: props.transportEnabled === false ? null : 1,
@@ -144,7 +190,9 @@ export function createStructuredSessionMocks() {
             messages:
               mocks.messages ??
               (mocks.mode === 'outbox'
-                ? projectStructuredAgentSessionMessages([], outbox.outbox, [])
+                ? projectStructuredAgentSessionMessages([], outbox.outbox, [], {
+                    rejectedInPlace: true
+                  })
                 : [
                     {
                       id: 'message-1',
@@ -168,8 +216,8 @@ export function createStructuredSessionMocks() {
             loadOlder: mocks.loadOlder,
             prompts: mocks.promptItems,
             outbox: outbox.outbox,
+            failedHere: outbox.failedHere,
             submissions: mocks.submissions,
-            blockedClientMessageId: outbox.blockedClientMessageId,
             send: outbox.send,
             retry: outbox.retry,
             isWorking: mocks.isWorking,
@@ -184,6 +232,13 @@ export function createStructuredSessionMocks() {
             turnId: mocks.turnId,
             canStop: mocks.canStop ?? mocks.turnId !== null,
             stop: mocks.stop,
+            queuedMessages: {
+              cards: mocks.queuedCards,
+              steer: mocks.queuedSteer,
+              remove: mocks.queuedRemove,
+              edit: mocks.queuedEdit,
+              steerNewest: mocks.queuedSteerNewest
+            },
             threadGoal: mocks.threadGoal,
             cancel: mocks.cancel,
             stopBackgroundTask: (taskId?: string) =>
@@ -218,6 +273,11 @@ export function createStructuredSessionMocks() {
     },
     structuredAgentSessionLaunch: () => ({
       retryStructuredAgentSessionLaunch: mocks.retryLaunch,
+      relaunchFailedStructuredAgentSessionForMessage: (worktreeId: string, sessionId: string) => {
+        if (mocks.launchLifecycle === 'failed') {
+          mocks.retryLaunch(worktreeId, sessionId)
+        }
+      },
       getStructuredAgentSessionLaunchLifecycle: () => mocks.launchLifecycle,
       getStructuredAgentSessionLaunchResumes: () => mocks.launchResumes,
       useStructuredAgentSessionLaunchSelection: () => null,
@@ -255,7 +315,8 @@ export function createStructuredSessionMocks() {
           },
           insertTypedText: () => true,
           handlePasteEvent: mocks.handlePasteEvent,
-          pasteFromClipboard: mocks.pasteFromClipboard
+          pasteFromClipboard: mocks.pasteFromClipboard,
+          contains: (node: Node | null) => fieldRef.current?.contains(node) === true
         }))
         return <textarea ref={fieldRef} data-testid="structured-composer" />
       })

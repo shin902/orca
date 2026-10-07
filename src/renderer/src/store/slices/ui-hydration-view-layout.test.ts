@@ -432,7 +432,7 @@ describe('createUISlice hydratePersistedUI', () => {
     expect(setUI).not.toHaveBeenCalled()
   })
 
-  it('persists workspace host scope changes', () => {
+  it('updates workspace host scope for the guarded UI writer', () => {
     const setUI = vi.fn(() => Promise.resolve())
     vi.stubGlobal('window', { api: { ui: { set: setUI } } })
     const store = createUIStore()
@@ -441,13 +441,10 @@ describe('createUISlice hydratePersistedUI', () => {
 
     expect(store.getState().workspaceHostScope).toBe('runtime:env-1')
     expect(store.getState().visibleWorkspaceHostIds).toEqual(['runtime:env-1'])
-    expect(setUI).toHaveBeenCalledWith({
-      workspaceHostScope: 'runtime:env-1',
-      visibleWorkspaceHostIds: ['runtime:env-1']
-    })
+    expect(setUI).not.toHaveBeenCalled()
   })
 
-  it('persists visible workspace host changes independently of focused host', () => {
+  it('updates host visibility independently of focused host for the guarded UI writer', () => {
     const setUI = vi.fn(() => Promise.resolve())
     vi.stubGlobal('window', { api: { ui: { set: setUI } } })
     const store = createUIStore()
@@ -457,10 +454,7 @@ describe('createUISlice hydratePersistedUI', () => {
 
     expect(store.getState().workspaceHostScope).toBe('runtime:env-1')
     expect(store.getState().visibleWorkspaceHostIds).toEqual(['local', 'runtime:env-1'])
-    expect(setUI).toHaveBeenLastCalledWith({
-      workspaceHostScope: 'runtime:env-1',
-      visibleWorkspaceHostIds: ['local', 'runtime:env-1']
-    })
+    expect(setUI).not.toHaveBeenCalled()
   })
 
   it('persists workspace host order changes', () => {
@@ -485,6 +479,24 @@ describe('createUISlice hydratePersistedUI', () => {
     expect(store.getState().groupBy).toBe('none')
     expect([...store.getState().collapsedGroups]).toEqual([])
     expect(setUI).toHaveBeenCalledWith({ groupBy: 'none', collapsedGroups: [] })
+  })
+
+  it('hydrates persisted per-worktree explorer roots', () => {
+    const store = createUIStore()
+
+    store.getState().hydratePersistedUI(
+      makePersistedUI({
+        explorerDisplayRootByWorktree: {
+          'repo-1::/repo': '/',
+          'repo-2::/repo': 'packages/app'
+        }
+      })
+    )
+
+    expect(store.getState().explorerDisplayRootByWorktree).toEqual({
+      'repo-1::/repo': '/',
+      'repo-2::/repo': 'packages/app'
+    })
   })
 
   it('hydrates persisted per-worktree dotfile visibility', () => {

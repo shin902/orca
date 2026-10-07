@@ -49,7 +49,7 @@ type RequestMark = Pick<StructuredAgentSessionLatestRequest, 'kind' | 'id'>
 type SessionBaseline = CompletionFeedCursor & { settled: RequestMark | null }
 
 function settledMark(request: StructuredAgentSessionLatestRequest | null): RequestMark | null {
-  return request && !request.running ? { kind: request.kind, id: request.id } : null
+  return request && request.turnState !== 'running' ? { kind: request.kind, id: request.id } : null
 }
 
 export class StructuredAgentSessionTurnCompletionFeed {
@@ -106,7 +106,7 @@ export class StructuredAgentSessionTurnCompletionFeed {
       return
     }
     if (baseline.epoch !== cursor.epoch || cursor.sequence < baseline.sequence) {
-      // Epoch replacement (rewind, repair, or legacy import) republishes history with a new
+      // Epoch replacement (rewind or legacy import) republishes history with a new
       // identity. It is not a provider edge, so re-baseline silently instead of announcing the
       // newest settled row as a fresh completion.
       baseline.epoch = cursor.epoch
@@ -115,7 +115,7 @@ export class StructuredAgentSessionTurnCompletionFeed {
       return
     }
     baseline.sequence = cursor.sequence
-    if (request?.running) {
+    if (request?.turnState === 'running') {
       // A running turn clears the mark, so this detector fires on each running → settled
       // transition rather than on an id it happens not to have seen.
       baseline.settled = null

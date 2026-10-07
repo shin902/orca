@@ -1,3 +1,5 @@
+import '../unused-default-rpc-methods.test-fixture'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../../shared/agent-session-journal-types'
 // A chat at rest, through the RPC surface a client actually calls: opening it starts nothing, what
 // it can answer without an agent it answers, and the first send is what starts one.
 
@@ -5,13 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-session-mutation-envelope'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { activeStructuredAgentSessionTurnId } from '../../../../shared/structured-agent-session-projection'
-import { openJournalDatabase } from '../../../native-chat/agent-session-journal/journal-database'
 import {
-  journalDatabaseFile,
-  journalDirectoryFor
-} from '../../../native-chat/agent-session-journal/journal-paths'
-import {
-  HOST_TEST_LOCATION,
   hostTestAttachParams,
   hostTestMessage,
   hostTestOperationId
@@ -33,6 +29,11 @@ import { RpcDispatcher } from '../dispatcher'
 import { closeStructuredAgentSessionChild } from '../../structured-agent-session-close'
 import { discardStructuredWorkerSession } from './orchestration-structured-worker-session'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
+import {
+  liveTestJournalRows,
+  openTestJournalHostDatabase,
+  updateTestJournalRowJson
+} from '../../../native-chat/agent-session-journal/journal-host-database-test-support'
 
 const CLIENT = {
   clientId: 'device-1',
@@ -158,7 +159,8 @@ describe('the accessor', () => {
       .at(-1)?.[0]
       .events?.appendItem(
         { provider: 'codex', threadId: REST_TEST_THREAD, turnId: 'turn-1', ordinal: 1 },
-        hostTestMessage('from the provider')
+        hostTestMessage('from the provider'),
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )
     await rig.host.flushStreamedEvents(SESSION)
     await rig.restart()
@@ -287,8 +289,11 @@ describe('the accessor', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const logged = (): unknown[] =>
       warn.mock.calls
-        .filter(([line]) => line === '[agent-session] opening the conversation for a read failed:')
-        .map(([, error]) => error)
+        .filter(
+          ([line]) =>
+            line === '[agent-session] open-for-read: opening the conversation for a read failed'
+        )
+        .map(([, fields]) => fields?.error)
     const reconnect = async (): Promise<RpcResponse[]> => [
       ...(await call('agentSession.subscribe', { sessionId: SESSION })),
       ...(await call('agentSession.history', { sessionId: SESSION, direction: 'tail' }))
@@ -308,28 +313,34 @@ describe('the accessor', () => {
     expect(logged()).toEqual([denied, exhausted])
   })
 
-  it('opens a corrupt journal through the recovering open and still accepts a send (P2-03)', async () => {
+  it('refuses a damaged journal as unloadable at subscribe and send, and keeps its rows (P2-03)', async () => {
     await foundRestTestChat(rig)
     await rig.host.flushAllStreamedEvents()
-    const directory = journalDirectoryFor(rig.root, {
-      workspaceId: HOST_TEST_LOCATION.workspaceId,
-      sessionId: SESSION
-    })
-    // A row that no longer parses: the recovering open keeps the readable prefix and rebuilds.
-    const opened = openJournalDatabase(journalDatabaseFile(directory))
-    try {
-      opened.db.prepare('UPDATE journal_rows SET row_json = ? WHERE seq = ?').run('}{', 2)
-    } finally {
-      opened.db.close()
-    }
+    updateTestJournalRowJson(openTestJournalHostDatabase(rig.root).db, SESSION, 2, '}{')
     await rig.restart()
     setStructuredAgentSessionHost(rig.host)
 
     const frames = await call('agentSession.subscribe', { sessionId: SESSION })
-    expect(frames.some((frame) => !frame.ok)).toBe(false)
-    expect(frames.find((frame) => frame.ok)).toMatchObject({ result: { type: 'snapshot' } })
+    expect(frames.find((frame) => !frame.ok)).toMatchObject({
+      error: {
+        data: {
+          refusal: {
+            code: 'agent_session_journal_unreadable',
+            details: { reason: 'journalCorrupt' }
+          }
+        }
+      }
+    })
     const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
-    expect((await rig.host.send(CALLER, restTestSend('after the repair', fence))).ok).toBe(true)
+    expect(await rig.host.send(CALLER, restTestSend('after the damage', fence))).toMatchObject({
+      ok: false,
+      refusal: { code: 'agent_session_journal_unreadable', details: { reason: 'journalCorrupt' } }
+    })
+    expect(
+      liveTestJournalRows(openTestJournalHostDatabase(rig.root).db, SESSION).find(
+        (row) => row.seq === 2
+      )?.rowJson
+    ).toBe('}{')
   })
 
   it('subscribes an old mobile client that holds first even when no agent can start (P2-06)', async () => {
@@ -421,7 +432,8 @@ describe('an agent exit', () => {
       .at(-1)?.[0]
       .events?.appendItem(
         { provider: 'codex', threadId: REST_TEST_THREAD, turnId: 'working', ordinal: 50 },
-        { kind: 'turn', turnId: 'working', state: 'running' }
+        { kind: 'turn', turnId: 'working', state: 'running' },
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )
     await rig.host.flushStreamedEvents(SESSION)
     // The exit's own write and the retry recording the exit queues are both refused.

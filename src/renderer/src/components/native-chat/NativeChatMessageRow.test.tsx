@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
-import { MessageRow } from './NativeChatMessageRow'
+import { MessageRow, type NativeChatDeliveryNotice } from './NativeChatMessageRow'
 
 afterEach(cleanup)
 
@@ -163,8 +163,8 @@ describe('MessageRow send mode', () => {
   })
 })
 
-describe('a user message that did not go through', () => {
-  function renderUser(deliveryNotice?: { text: string; onRetry?: () => void }) {
+describe('what a user message says about its delivery', () => {
+  function renderUser(deliveryNotice?: NativeChatDeliveryNotice) {
     return render(
       <MessageRow
         message={{
@@ -203,42 +203,41 @@ describe('a user message that did not go through', () => {
     renderUser()
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
-})
 
-describe("MessageRow — a subagent's row speaks as that subagent", () => {
-  function renderAgentRow(agentId: string | undefined, subagentLabel?: string) {
-    return render(
+  // Muted, in the time's place, and shown without hover: a message nothing confirmed yet never
+  // looks like one that went through. Copy keeps its hover reveal, and the row its height.
+  it('says quietly that it is still sending in place of its time, with no Retry', () => {
+    renderUser({ sending: true })
+
+    const sending = screen.getByText('Sending…')
+    const copy = screen.getByRole('button', { name: 'Copy message' })
+    expect(sending).toHaveClass('text-xs', 'text-muted-foreground')
+    expect(Array.from(sending.parentElement!.children)).toEqual([copy, sending])
+    expect(sending.parentElement).not.toHaveClass('can-hover:opacity-0')
+    expect(sending.parentElement!.parentElement).toHaveClass('group')
+    expect(copy).toHaveClass('can-hover:opacity-0', 'group-hover:opacity-100')
+    expect(screen.queryByRole('time')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('keeps the same row when the message is confirmed, with the time back in its place', () => {
+    const { rerender } = renderUser({ sending: true })
+    const meta = screen.getByText('Sending…').parentElement
+    rerender(
       <MessageRow
         message={{
           id: 'message',
-          role: 'assistant',
+          role: 'user',
           timestamp: 0,
           source: 'transcript',
-          blocks: [{ type: 'text', text: 'The PR is CLEAN.' }],
-          ...(agentId === undefined ? {} : { agentId })
+          blocks: [{ type: 'text', text: 'Message text' }]
         }}
         expandSignal={false}
         onScrollMessageToTop={vi.fn()}
-        subagentLabel={subagentLabel}
       />
     )
-  }
-
-  it('names the subagent that wrote the row', () => {
-    renderAgentRow('task-1', 'explore the lane')
-    expect(
-      screen.getByRole('note', { name: 'Written by subagent explore the lane' })
-    ).toBeInTheDocument()
-    expect(screen.getByText('The PR is CLEAN.')).toBeInTheDocument()
-  })
-
-  it('still marks the row as a subagent when no loaded roster names it', () => {
-    renderAgentRow('task-9')
-    expect(screen.getByRole('note', { name: 'Subagent' })).toBeInTheDocument()
-  })
-
-  it("adds nothing to the session's own row", () => {
-    renderAgentRow(undefined, 'explore the lane')
-    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.queryByText('Sending…')).toBeNull()
+    expect(screen.getByRole('time').parentElement).toBe(meta)
+    expect(meta).toHaveClass('can-hover:opacity-0')
   })
 })
