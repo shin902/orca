@@ -51,7 +51,6 @@ it.each([
   'mobile/src/release.json',
   'mobile/new-toolchain/input',
   'package.json',
-  'pnpm-lock.yaml',
   '.github/workflows/mobile.yml',
   '.github/workflows/mobile-ios-release.yml',
   '.github/actions/install-node-dependencies/action.yml',
@@ -60,6 +59,11 @@ it.each([
 ])('retains Ruby release coverage for changed or unknown inputs: %s', (file) => {
   expect(shouldRunMobileReleaseChecks([file])).toBe(true)
   expect(shouldRunMobileReleaseChecks(['mobile/src/view.tsx', file])).toBe(true)
+})
+
+it('skips Ruby checks for a root lockfile change, which fastlane never reads', () => {
+  expect(shouldRunMobileReleaseChecks(['pnpm-lock.yaml'])).toBe(false)
+  expect(shouldRunMobileReleaseChecks(['pnpm-lock.yaml', 'mobile/fastlane/Fastfile'])).toBe(true)
 })
 
 it('runs Ruby checks when the changed-file evidence is empty', () => {

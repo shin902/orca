@@ -13,16 +13,14 @@ import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-ha
 import { ArrowDown, ChevronsDownUp, ChevronsUpDown, Square } from 'lucide-react-native'
 import type { AskAnswerSelection, AskPrompt } from '../../../src/shared/native-chat-ask'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
-import {
-  nativeChatSubagentLabel,
-  nativeChatSubagentLabels
-} from '../../../src/shared/native-chat-subagent-attribution'
 import type {
   NativeChatLiveTurnIndicator,
   NativeChatSettledTurns
 } from '../../../src/shared/native-chat-turn-status'
+import type { NativeChatTurnJournal } from '../../../src/shared/native-chat-turn-membership'
 import { colors } from '../theme/mobile-theme'
 import { styles } from './mobile-native-chat-view-styles'
+import { mobileNativeChatListFooter } from './mobile-native-chat-list-footer'
 import {
   buildMobileNativeChatTransientData,
   mobileNativeChatEmptyState,
@@ -37,6 +35,7 @@ import { MobileAgentWorkingIndicator } from './MobileAgentWorkingIndicator'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import { MobileNativeChatComposer } from './MobileNativeChatComposer'
 import { MobileNativeChatPromptCard } from './MobileNativeChatPromptCard'
+import { NO_QUEUED_SLOT, type MobileQueuedSlotProps } from './use-mobile-native-chat-queued-slot'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
 import type { MobileChatQuestion } from './mobile-native-chat-question'
 import type { MobileNativeChatSessionOptionPickersProps } from './MobileNativeChatSessionOptionPickers'
@@ -47,13 +46,15 @@ import type { MobileNativeChatStatus } from './use-mobile-native-chat-session'
  *  terminal subscription has not acknowledged its input lease yet. */
 export type MobileNativeChatInputLockReason = 'disconnected' | 'waiting'
 
-type Props = {
+type Props = MobileQueuedSlotProps & {
   /** Raw transcript, only for telling "still loading" from "loaded and empty". */
   messages: NativeChatMessage[]
   /** `messages` with noise stripped and tool turns folded in, from the overlay. */
   folded: NativeChatMessage[]
   status: MobileNativeChatStatus
   error?: string
+  /** The read failed for good (damage, a newer Orca's chat): its error takes the whole pane. */
+  readFailedFinally?: boolean
   /** Resolved agent for this chat; names the empty-state copy (desktop parity). */
   agent?: string | null
   agentWorking?: boolean
@@ -66,10 +67,8 @@ type Props = {
   /** Structured lane: host-recorded turn timing feeding the per-turn status rows. */
   workingStartedAt?: number | null
   settledTurns?: NativeChatSettledTurns | null
-  /** Structured lane: the key the host says anchors the running turn's bar. */
-  activeTurnOpenedBy?: string | null
-  /** Structured lane: host-attributed turn ownership per journal item id. */
-  turnKeysByItemId?: ReadonlyMap<string, string> | null
+  /** Structured lane: the journal that places each row in its turn. */
+  turnJournal?: NativeChatTurnJournal | null
   /** Interrupt the agent mid-turn (shown as a Stop button on the working bar). */
   /** Interrupt a provider turn. */
   onStop?: () => void
@@ -148,6 +147,7 @@ export function MobileNativeChatView({
   folded,
   status,
   error,
+  readFailedFinally = false,
   agent,
   agentWorking,
   canStop = agentWorking,
@@ -155,8 +155,7 @@ export function MobileNativeChatView({
   turnIndicator = null,
   workingStartedAt,
   settledTurns,
-  activeTurnOpenedBy = null,
-  turnKeysByItemId = null,
+  turnJournal = null,
   onStop,
   streaming,
   hasMore,
@@ -195,6 +194,7 @@ export function MobileNativeChatView({
   onAnswerQuestion,
   permission,
   onRespondPermission,
+  queuedSlot: { cards: queuedCards, composerInputRef: inputRef } = NO_QUEUED_SLOT,
   onOpenFile,
   keyboardInset = 0
 }: Props): React.JSX.Element {
@@ -219,7 +219,6 @@ export function MobileNativeChatView({
       }),
     [messages, folded, streaming, pending, imagePreviewsByMessageId]
   )
-  const subagentLabels = useMemo(() => nativeChatSubagentLabels(messages), [messages])
   const {
     listRef,
     showJumpToTail,
@@ -276,8 +275,7 @@ export function MobileNativeChatView({
     isWorking: agentWorking === true,
     workingStartedAt,
     settledTurns,
-    activeTurnOpenedBy,
-    turnKeysByItemId,
+    turnJournal,
     thinking: turnIndicator?.thinking === true,
     activityText: turnIndicator?.activityText ?? null,
     scopeKey: sendSurfaceId
@@ -294,17 +292,36 @@ export function MobileNativeChatView({
         onOpenFile={onOpenFile}
         structuredActivityUi={structuredActivityUi}
         onToggleTurn={turns.onToggleTurn}
-        subagentLabel={nativeChatSubagentLabel(subagentLabels, item)}
         {...turns.resolveRow(index, item)}
       />
     ),
-    [toolsExpanded, fontScale, onOpenFile, structuredActivityUi, subagentLabels, turns]
+    [toolsExpanded, fontScale, onOpenFile, structuredActivityUi, turns]
   )
+
+  const liveStatus =
+    structuredActivityUi && agentWorking && !hasPendingStructuredInteraction && turns.active ? (
+      <MobileNativeChatTurnActivity
+        thinking={turns.active.thinking}
+        activityText={turns.activeActivityText}
+      />
+    ) : null
 
   const emptyState = mobileNativeChatEmptyState(status, agent ?? null, error)
   const showLoading = status === 'loading' && messages.length === 0
 
   const lockReason = useSettledMobileNativeChatInputLock(inputLockReason)
+  const emptyStateView = emptyState ? (
+    <View style={styles.center}>
+      <Text style={styles.emptyTitle}>{emptyState.title}</Text>
+      <Text style={styles.emptySubtitle}>{emptyState.subtitle}</Text>
+    </View>
+  ) : null
+
+  // Whatever was already on screen: nothing here can act on a chat that cannot load, and its words
+  // say why once, as a fresh open's do.
+  if (readFailedFinally && emptyStateView) {
+    return <View style={[styles.root, { paddingBottom: bottomPad }]}>{emptyStateView}</View>
+  }
 
   return (
     <View style={[styles.root, { paddingBottom: bottomPad }]}>
@@ -317,7 +334,7 @@ export function MobileNativeChatView({
           <GestureDetector gesture={pinchGesture}>
             <FlatList
               ref={listRef}
-              data={data}
+              data={turns.listMessages}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
               contentContainerStyle={styles.listContent}
@@ -347,25 +364,12 @@ export function MobileNativeChatView({
                   </Pressable>
                 ) : null
               }
-              ListFooterComponent={
-                structuredActivityUi &&
-                agentWorking &&
-                !hasPendingStructuredInteraction &&
-                turns.active ? (
-                  <MobileNativeChatTurnActivity
-                    thinking={turns.active.thinking}
-                    activityText={turns.activeActivityText}
-                  />
-                ) : null
-              }
-              ListEmptyComponent={
-                emptyState ? (
-                  <View style={styles.center}>
-                    <Text style={styles.emptyTitle}>{emptyState.title}</Text>
-                    <Text style={styles.emptySubtitle}>{emptyState.subtitle}</Text>
-                  </View>
-                ) : null
-              }
+              ListFooterComponent={mobileNativeChatListFooter(
+                liveStatus,
+                turns.waitingRows,
+                renderItem
+              )}
+              ListEmptyComponent={emptyStateView}
             />
           </GestureDetector>
           {/* Jump-to-latest control. */}
@@ -380,6 +384,7 @@ export function MobileNativeChatView({
           ) : null}
         </GestureHandlerRootView>
       )}
+      {queuedCards}
       <MobileNativeChatPromptCard
         ask={ask}
         askKey={askKey}
@@ -438,7 +443,7 @@ export function MobileNativeChatView({
         onChangeText={onComposerTextChange}
         onSend={handleSend}
         sendSurfaceId={sendSurfaceId}
-        {...{ getSendCompletionGeneration, getComposerEditGeneration }}
+        {...{ getSendCompletionGeneration, getComposerEditGeneration, inputRef }}
         agent={agent}
         sessionOptions={sessionOptions}
         onAttachImage={onAttachImage}

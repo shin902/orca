@@ -1,11 +1,15 @@
 import { MobileSelectableText as Text } from '../components/MobileSelectableText'
-import { memo } from 'react'
-import { Image, Text as NativeText, View } from 'react-native'
+import { memo, useCallback, useState, type ComponentProps, type ReactNode } from 'react'
+import { Image, Text as NativeText, Pressable, View } from 'react-native'
+import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
+import { MobileNativeChatMessageActionsSheet } from './MobileNativeChatMessageActionsSheet'
 import { splitNativeChatBlocks } from '../../../src/shared/native-chat-tool-fold'
 import { selectActiveToolCall } from '../../../src/shared/native-chat-tool-activity'
 import { isImageRefBlock, isTextBlock } from '../../../src/shared/native-chat-types'
-import { agentJournalItemSubagentId } from '../../../src/shared/agent-session-journal-producer'
-import { NATIVE_CHAT_SUBAGENT_ATTRIBUTION_COPY } from '../../../src/shared/native-chat-subagent-attribution'
+import {
+  AGENT_SESSION_HOST_STATUS_COPY,
+  isAgentSessionHostStatusPresentation
+} from '../../../src/shared/agent-session-host-status-rows'
 import type { NativeChatBlock, NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { MobileMarkdown } from '../components/MobileMarkdown'
 import { MobileNativeChatTurnStatus } from './MobileNativeChatTurnStatus'
@@ -18,19 +22,35 @@ function Prose({
   block,
   invert,
   fontScale,
-  onOpenFile
+  onOpenFile,
+  onLongPress
 }: {
   block: NativeChatBlock
   invert?: boolean
   fontScale: number
   onOpenFile?: (relativePath: string) => void
+  /** Android only: routes a long press on a link span to the row's actions sheet. */
+  onLongPress?: () => void
 }): React.JSX.Element | null {
   if (isTextBlock(block)) {
+    if (isAgentSessionHostStatusPresentation(block.presentation)) {
+      return (
+        <Text
+          selectable={INLINE_TEXT_SELECTION}
+          style={[styles.hostNotice, { fontSize: TEXT_SIZE * fontScale }]}
+        >
+          {AGENT_SESSION_HOST_STATUS_COPY[block.presentation]}
+        </Text>
+      )
+    }
     // Inverted (user) bubbles use a fixed dark-on-light text rather than the
     // markdown renderer's light-on-dark palette.
     if (invert) {
       return (
-        <Text selectable style={[styles.userText, { fontSize: TEXT_SIZE * fontScale }]}>
+        <Text
+          selectable={INLINE_TEXT_SELECTION}
+          style={[styles.userText, { fontSize: TEXT_SIZE * fontScale }]}
+        >
           {block.text}
         </Text>
       )
@@ -41,6 +61,7 @@ function Prose({
         rangeSelectable
         textScale={1.25 * fontScale}
         onOpenFile={onOpenFile}
+        onLongPress={onLongPress}
       />
     )
   }
@@ -67,6 +88,25 @@ function Prose({
   return null
 }
 
+// Keep the existing responder hierarchy on platforms with inline selection.
+function Content({
+  onLongPress,
+  style,
+  children
+}: {
+  onLongPress?: () => void
+  style: ComponentProps<typeof View>['style']
+  children: ReactNode
+}): React.JSX.Element {
+  return onLongPress ? (
+    <Pressable onLongPress={onLongPress} style={style}>
+      {children}
+    </Pressable>
+  ) : (
+    <View style={style}>{children}</View>
+  )
+}
+
 function MobileNativeChatMessageImpl({
   message,
   toolsExpanded = false,
@@ -78,8 +118,7 @@ function MobileNativeChatMessageImpl({
   turnKey,
   onToggleTurn,
   activeTurnIsWorking,
-  structuredActivityUi = false,
-  subagentLabel
+  structuredActivityUi = false
 }: {
   message: NativeChatMessage
   toolsExpanded?: boolean
@@ -100,8 +139,6 @@ function MobileNativeChatMessageImpl({
   activeTurnIsWorking?: boolean
   /** Structured lane only: live tool progress plus the turn-status disclosure. */
   structuredActivityUi?: boolean
-  /** The roster's name for the subagent that wrote this row, when one names it. */
-  subagentLabel?: string
 }): React.JSX.Element {
   const isUser = message.role === 'user'
   const isReasoning = message.role === 'reasoning'
@@ -123,17 +160,17 @@ function MobileNativeChatMessageImpl({
     !turnExpanded &&
     !toolsExpanded
   const showToolRun = tools.length > 0 && !settledToolsHidden
-  // A subagent's row sits where it happened but speaks as that subagent. A row
-  // whose only content is hidden behind its settled turn names no one.
-  const subagentName =
-    isUser || agentJournalItemSubagentId(message) === null || (prose.length === 0 && !showToolRun)
-      ? null
-      : (subagentLabel ?? NATIVE_CHAT_SUBAGENT_ATTRIBUTION_COPY.unnamed)
+  // Mount selection UI only for the message being copied.
+  const [actionsOpen, setActionsOpen] = useState(false)
+  // Keep the memoized Markdown context stable as the message streams.
+  const openActions = useCallback(() => setActionsOpen(true), [])
+  const onLongPress = INLINE_TEXT_SELECTION ? undefined : openActions
 
   const statusRow = turnStatus ? (
     <MobileNativeChatTurnStatus
       startedAt={turnStatus.startedAt}
       workedSeconds={turnStatus.workedSeconds}
+      verdict={turnStatus.verdict}
       expanded={turnExpanded ?? false}
       onToggleExpanded={turnKey && onToggleTurn ? () => onToggleTurn(turnKey) : undefined}
     />
@@ -143,30 +180,10 @@ function MobileNativeChatMessageImpl({
       {/* A turn with no user bubble carries its bar above its first row. */}
       {turnStatusAbove ? statusRow : null}
       <View style={[styles.row, isUser && styles.rowUser]}>
-        <View
-          style={[
-            styles.content,
-            isUser && styles.userBubble,
-            isReasoning && styles.reasoning,
-            subagentName !== null && styles.subagent
-          ]}
+        <Content
+          onLongPress={onLongPress}
+          style={[styles.content, isUser && styles.userBubble, isReasoning && styles.reasoning]}
         >
-          {subagentName !== null ? (
-            <NativeText
-              style={styles.subagentCaption}
-              accessibilityLabel={
-                subagentLabel === undefined
-                  ? subagentName
-                  : NATIVE_CHAT_SUBAGENT_ATTRIBUTION_COPY.writtenBy.replaceAll(
-                      '{{value0}}',
-                      subagentLabel
-                    )
-              }
-              numberOfLines={1}
-            >
-              {subagentName}
-            </NativeText>
-          ) : null}
           {prose.map((block, index) => (
             <Prose
               key={index}
@@ -174,6 +191,7 @@ function MobileNativeChatMessageImpl({
               invert={isUser}
               fontScale={fontScale}
               onOpenFile={onOpenFile}
+              onLongPress={onLongPress}
             />
           ))}
           {showToolRun ? (
@@ -188,8 +206,14 @@ function MobileNativeChatMessageImpl({
               onOpenFile={onOpenFile}
             />
           ) : null}
-        </View>
+        </Content>
       </View>
+      {actionsOpen ? (
+        <MobileNativeChatMessageActionsSheet
+          message={message}
+          onClose={() => setActionsOpen(false)}
+        />
+      ) : null}
       {turnStatusAbove ? null : statusRow}
     </>
   )

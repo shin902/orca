@@ -31,10 +31,11 @@ export async function deliverAndSettleWorkerStartReadiness(args: {
   structuredSession: Awaited<ReturnType<typeof createStructuredWorkerSessionForWorktree>> | null
   terminalHandle: string
   coordinatorHandle: string
-  dispatchCapability: string
   devMode: boolean | undefined
   requestId: string
   agent: string | null
+  /** The agent this start launched into `terminalHandle`; null when the caller supplied it. */
+  launchedAgent: string | null
   setupReceipt: WorkerSetupReceipt
   launchReceipt: OrchestrationWorkerLaunchReceipt
   mode: WorkerStartModeReceipt
@@ -49,6 +50,7 @@ export async function deliverAndSettleWorkerStartReadiness(args: {
   args.onStage('dispatch_input')
   const delivery = await deliverWorkerDispatchPreamble({
     runtime,
+    db,
     structuredSession,
     terminalHandle,
     dispatchId: args.dispatchId,
@@ -56,9 +58,9 @@ export async function deliverAndSettleWorkerStartReadiness(args: {
     taskId: task.id,
     taskSpec: task.spec,
     coordinatorHandle: args.coordinatorHandle,
-    dispatchCapability: args.dispatchCapability,
     devMode: args.devMode,
-    requestId: args.requestId
+    requestId: args.requestId,
+    launchedAgent: args.launchedAgent
   })
   effects.push({
     kind: 'dispatch_input',
@@ -89,7 +91,7 @@ export async function deliverAndSettleWorkerStartReadiness(args: {
   const currentWorker = db.getWorkerDispatch(args.dispatchId)
   const alreadySettled = currentWorker && currentWorker.state !== 'starting'
   if (turnStart.verdict === 'unobserved' && !alreadySettled) {
-    // Honest `unverifiable`: keep the dispatch capability and the terminal — the worker may
+    // Honest `unverifiable`: keep lifecycle authority and the terminal — the worker may
     // still recover and report (worker-report settlement reconnects a start_unknown worker) —
     // but never claim ready for a turn nobody observed.
     effects.push({

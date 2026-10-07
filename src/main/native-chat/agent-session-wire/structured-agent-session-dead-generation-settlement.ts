@@ -4,10 +4,12 @@ import {
   type SubmissionRejectionFact
 } from '../../../shared/agent-session-failure'
 import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import { STALE_SESSION_ROW_PREFIX } from '../../../shared/agent-session-stop-row-identity'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
-import type {
-  AgentJournalItemBody,
-  AgentJournalRenderItem
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalItemBody,
+  type AgentJournalRenderItem
 } from '../../../shared/agent-session-journal-types'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { partitionJournalLifecycleMutations } from '../agent-session-journal/journal-lifecycle-batch-partition'
@@ -25,28 +27,31 @@ import {
 } from './structured-agent-session-start-failure-row'
 import type { AgentSessionDeathEvidence } from '../../../shared/agent-session-record'
 import {
+  endedByPersonsStop,
   provenUnverifiableTurnRevisions,
   runningTurnLifecycleRevisions,
+  stopFoundTurnLiveAt,
   turnVerdictFromDeathEvidence,
   type StructuredAgentSessionTurnVerdict
 } from './structured-agent-session-stale-turn-verdict'
+import {
+  exitedRootTurnScope,
+  runningRootTurnScope
+} from './structured-agent-session-exit-turn-scope'
+import {
+  withdrawCodexSendsNoTurnOpenedFor,
+  type UnopenedSendJournal
+} from './structured-agent-session-unopened-send-withdrawal'
 
 /** Bounds the exit reason the lease keeps as log evidence; a provider diagnostic is held to the
  *  same cap. */
 export const MAX_UNEXPECTED_EXIT_REASON_CHARS = MAX_PROVIDER_DIAGNOSTIC_CHARS
 
-type DeadGenerationSubmission = Pick<
-  ReturnType<AgentSessionJournal['submissions']>[number],
-  'clientMessageId' | 'dispatchState' | 'recovered' | 'handoverRecorded' | 'handedOverAt'
->
-
-export type DeadGenerationJournal = {
+export type DeadGenerationJournal = UnopenedSendJournal & {
   appendLifecycleBatch: AgentSessionJournal['appendLifecycleBatch']
   markPendingSubmissionsUnknown: AgentSessionJournal['markPendingSubmissionsUnknown']
   rejectPendingSubmissions: AgentSessionJournal['rejectPendingSubmissions']
-  snapshot: () => Pick<ReturnType<AgentSessionJournal['snapshot']>, 'items'>
   pendingSubmissions?: AgentSessionJournal['pendingSubmissions']
-  submissions?: () => DeadGenerationSubmission[]
 }
 
 export type StructuredAgentSessionUnfinishedWork = {
@@ -97,6 +102,11 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
   return outcomeItems.some((item) => !isCleanlySettled(currentItems.get(item.itemId)))
 }
 
+/** Whether the settlement was written, and what stopped it when it was not. */
+export type StructuredAgentSessionDeadGenerationSettlement =
+  | { ok: true }
+  | { ok: false; error: unknown }
+
 export async function settleStructuredAgentSessionDeadGeneration(input: {
   journal: DeadGenerationJournal
   sessionId: string
@@ -112,13 +122,12 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
   /** The provider never finished starting: the start that failed, keyed by the child's
    *  generation. Its row is the one the delivery loop writes for the same start. */
   exitedDuringStartup?: { generation: string | null }
-  onError?: (sessionId: string, error: unknown) => void
-}): Promise<boolean> {
+}): Promise<StructuredAgentSessionDeadGenerationSettlement> {
   try {
     const hasUnfinishedWork = hasUnfinishedStructuredAgentSessionWork(input.journal)
     const showUnexpectedExitOutcome = input.showUnexpectedExitOutcome ?? hasUnfinishedWork
     if (!showUnexpectedExitOutcome && !hasUnfinishedWork) {
-      return true
+      return { ok: true }
     }
     // A queued message is the delivery loop's to settle: it was never handed to this child. A
     // child that never proved its start accepted nothing either — input is written only after it
@@ -127,6 +136,9 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
     const startupFailure = input.exitedDuringStartup
       ? structuredAgentSessionStartFailure({ exit: input.exitFailure }, input.failureTextContext)
       : null
+    if (!startupFailure) {
+      await withdrawCodexSendsNoTurnOpenedFor(input.journal, input.fence)
+    }
     await (startupFailure
       ? input.journal.rejectPendingSubmissions(input.fence, startupFailure)
       : input.journal.markPendingSubmissionsUnknown(input.fence, input.pendingSubmissionReason))
@@ -144,6 +156,7 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
         mutations.push(structuredAgentSessionStartFailureRow(startKey, startupFailure))
       }
     } else if (showUnexpectedExitOutcome) {
+      // The turn the exit ended, and an error so no fold ever hides why it stopped.
       mutations.push({
         kind: 'item',
         identity: { provider: 'orca', clientMessageId: input.settlementId },
@@ -155,15 +168,22 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
               ...input.failureTextContext,
               surface: 'row'
             }
-          )
-        }
+          ),
+          tone: 'error'
+        },
+        turnScope: exitedRootTurnScope(items, input.verdict)
       })
     }
     for (const item of items) {
       const identity = parseAgentJournalItemKey(item.itemId)
       const body = terminalDeadGenerationBody(item)
       if (identity && body) {
-        mutations.push({ kind: 'item', identity, body })
+        mutations.push({
+          kind: 'item',
+          identity,
+          body,
+          turnScope: item.turnScope ?? AGENT_JOURNAL_THREAD_SCOPE
+        })
       }
     }
     mutations.push(...runningTurnLifecycleRevisions(items, input.verdict))
@@ -176,10 +196,10 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
         mutations: chunk.mutations
       })
     }
-    return true
+    return { ok: true }
   } catch (error) {
-    input.onError?.(input.sessionId, error)
-    return false
+    // Returned rather than logged: each caller logs it under its own scope.
+    return { ok: false, error }
   }
 }
 
@@ -203,35 +223,46 @@ export async function settleStaleStructuredAgentSessionState(input: {
   const items = journal.snapshot().items
   // Each turn is judged by the evidence only if it names that turn's owner.
   const verdictFor = (item: AgentJournalRenderItem) =>
-    turnVerdictFromDeathEvidence(input.deathEvidence, journal.itemFence(item.itemId))
+    turnVerdictFromDeathEvidence(
+      input.deathEvidence,
+      journal.itemFence(item.itemId),
+      stopFoundTurnLiveAt(journal, item)
+    )
   // Per attempt: a retry re-partitions only what is left, and a reused chunk id would skip it.
   const generation = input.acquisitionGeneration ?? `seq-${journal.cursor().sequence}`
-  const settlementId = `stale-session:${input.sessionId}:${input.fence}:${generation}`
+  const settlementId = `${STALE_SESSION_ROW_PREFIX}${input.sessionId}:${input.fence}:${generation}`
   const mutations: JournalLifecycleMutationInput[] = []
   for (const item of items) {
     const identity = parseAgentJournalItemKey(item.itemId)
     const body = terminalDeadGenerationBody(item)
     if (identity && body) {
-      mutations.push({ kind: 'item', identity, body })
+      mutations.push({
+        kind: 'item',
+        identity,
+        body,
+        turnScope: item.turnScope ?? AGENT_JOURNAL_THREAD_SCOPE
+      })
     }
   }
   const proven = provenUnverifiableTurnRevisions(items, input.deathEvidence, journal)
-  mutations.push(
+  const turnEnds = [
     ...items.flatMap((item) => runningTurnLifecycleRevisions([item], verdictFor(item))),
     ...proven
-  )
+  ]
+  mutations.push(...turnEnds)
   const evidence = input.deathEvidence
   if (
     evidence &&
     (proven.length > 0 ||
-      items.some((item) => isInProgressItem(item) && verdictFor(item).state === 'interrupted'))
+      items.some((item) => isInProgressItem(item) && verdictFor(item).state === 'interrupted')) &&
+    !endedByPersonsStop(journal, turnEnds)
   ) {
     mutations.unshift({
       kind: 'item',
       // Named by the death it explains, so a retry after a partly written settle adds no second row.
       identity: {
         provider: 'orca',
-        clientMessageId: `stale-session:${input.sessionId}:death-${evidence.ownerFence ?? 'unowned'}-${evidence.observedAt}`
+        clientMessageId: `${STALE_SESSION_ROW_PREFIX}${input.sessionId}:death-${evidence.ownerFence ?? 'unowned'}-${evidence.observedAt}`
       },
       // The death evidence is Orca's log text, never a sentence for a person: the row says only
       // that the provider stopped.
@@ -240,8 +271,10 @@ export async function settleStaleStructuredAgentSessionState(input: {
         ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), {
           ...input.failureTextContext,
           surface: 'row'
-        })
-      }
+        }),
+        tone: 'error'
+      },
+      turnScope: runningRootTurnScope(items)
     })
   }
   for (const chunk of partitionJournalLifecycleMutations(settlementId, mutations)) {
