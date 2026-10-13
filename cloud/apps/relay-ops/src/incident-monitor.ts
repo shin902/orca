@@ -121,7 +121,12 @@ export const INCIDENT_MONITOR_THRESHOLDS = {
   // real fault lands in the hundreds per window, an order of magnitude clear of
   // this bar.
   directorErrors: 15,
-  authErrors: 0,
+  // Why: 2, raised 2026-10-07 from 0. Auth answers ~58k requests per five minutes
+  // (24 h to 2026-10-07: min 44k) and logged two 5xx in that day, so a single 500 on
+  // the desktop sign-in callback froze the c13 and c28 waves with auth healthy. A real
+  // auth fault fails hundreds per window; the ratio bar keeps a near-idle auth strict.
+  authErrors: 2,
+  authErrorRatio: 0.001,
   // Why: 800 exceeded the 600 hard cap, so this could never trigger on a capped cell. 500 is
   // the ordinary admission limit a cell actually stops at (600 cap - 100 control-rebind reserve).
   cellConnections: 500,
@@ -193,6 +198,17 @@ export type IncidentFailure = {
   signal?: string
   observed?: number
   threshold?: number
+}
+
+// Keep the source/code prefix other tooling matches on, then name the signal and
+// its numbers so a frozen wave is attributable without re-reading the sample.
+export function describeIncidentFailure(failure: IncidentFailure): string {
+  const detail = [
+    failure.signal,
+    failure.observed === undefined ? null : `observed=${failure.observed}`,
+    failure.threshold === undefined ? null : `threshold=${failure.threshold}`
+  ].filter((part): part is string => part !== null && part !== undefined)
+  return [`${failure.source}/${failure.code}`, ...detail].join(' ')
 }
 
 export type IncidentEvaluation = {
@@ -410,7 +426,7 @@ function checkRule(
   rule: NumericRule
 ): void {
   const signal = signals[rule.signal]
-  if (!signal) return addMissingSignal(failures, source, rule.signal)
+  if (!signal) {return addMissingSignal(failures, source, rule.signal)}
   const failed =
     (rule.comparison === 'max' && signal.value > rule.threshold) ||
     (rule.comparison === 'min' && signal.value < rule.threshold) ||
@@ -422,6 +438,27 @@ function checkRule(
       signal: rule.signal,
       observed: signal.value,
       threshold: rule.threshold
+    })
+  }
+}
+
+// Why: a few errors are noise only against real traffic; with almost no requests they are the outage.
+function checkAuthErrorRatio(
+  failures: IncidentFailure[],
+  signals: Record<string, IncidentSignal>
+): void {
+  const errors = signals['auth.errors']?.value ?? 0
+  if (errors === 0) {return}
+  const requests = signals['auth.requests']
+  if (!requests) {return addMissingSignal(failures, 'cloud-monitoring', 'auth.requests')}
+  const ratio = requests.value > 0 ? errors / requests.value : Number.POSITIVE_INFINITY
+  if (ratio > INCIDENT_MONITOR_THRESHOLDS.authErrorRatio) {
+    failures.push({
+      code: 'threshold_max',
+      source: 'cloud-monitoring',
+      signal: 'auth.error_ratio',
+      observed: ratio,
+      threshold: INCIDENT_MONITOR_THRESHOLDS.authErrorRatio
     })
   }
 }
@@ -526,7 +563,7 @@ function checkCell(
       cell.cellId === recoverySourceCellId &&
       signalName.endsWith('.migration_target_inactive')
     ) {
-      if (!signals?.[signalName]) addMissingSignal(failures, source, signalName)
+      if (!signals?.[signalName]) {addMissingSignal(failures, source, signalName)}
       continue
     }
     if (
@@ -536,7 +573,7 @@ function checkCell(
       cell.expectedAdmissionState === 'existing-only' &&
       signalName.endsWith('.migration_target_inactive')
     ) {
-      if (!signals?.[signalName]) addMissingSignal(failures, source, signalName)
+      if (!signals?.[signalName]) {addMissingSignal(failures, source, signalName)}
       continue
     }
     if (
@@ -623,8 +660,10 @@ export function evaluateIncidentSample(
   }
   for (const rule of NUMERIC_RULES) {
     const source = sample.sources[rule.source]
-    if (source) checkRule(failures, rule.source, source.signals, rule)
+    if (source) {checkRule(failures, rule.source, source.signals, rule)}
   }
+  const monitoring = sample.sources['cloud-monitoring']
+  if (monitoring) {checkAuthErrorRatio(failures, monitoring.signals)}
   for (const cell of sample.cells) {
     checkCell(
       failures,
@@ -738,10 +777,10 @@ function freshnessKey(failure: IncidentFailure): string {
 // never reaches the tolerance, so a continuously unhealthy cell passes the gate.
 export function cellProbeStreakKey(failure: IncidentFailure): string | null {
   const signal = failure.signal
-  if (failure.source !== 'active-probe' || signal === undefined) return null
-  if (!signal.startsWith('cell.')) return null
+  if (failure.source !== 'active-probe' || signal === undefined) {return null}
+  if (!signal.startsWith('cell.')) {return null}
   const lastDot = signal.lastIndexOf('.')
-  if (lastDot < 'cell.'.length) return null
+  if (lastDot < 'cell.'.length) {return null}
   return `${failure.source}/${signal.slice(0, lastDot)}`
 }
 
@@ -773,16 +812,16 @@ function resumeFreshnessStreaks(
   const events = state.continuityEvents
   const streaks = new Map<string, number>()
   const last = events[events.length - 1]
-  if (!last?.tolerated) return streaks
+  if (!last?.tolerated) {return streaks}
   for (const key of new Set(last.failures.map(freshnessKey))) {
     let streak = 0
     let laterAt: number | null = null
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index]!
       const recordedAt = Date.parse(event.recordedAt)
-      if (!event.tolerated) break
-      if (laterAt !== null && laterAt - recordedAt > state.intervalMs * 1.5) break
-      if (!event.failures.some((failure) => freshnessKey(failure) === key)) break
+      if (!event.tolerated) {break}
+      if (laterAt !== null && laterAt - recordedAt > state.intervalMs * 1.5) {break}
+      if (!event.failures.some((failure) => freshnessKey(failure) === key)) {break}
       streak++
       laterAt = recordedAt
     }
@@ -906,13 +945,13 @@ export async function runIncidentMonitor(
         : []
     )
     for (const key of [...freshnessStreaks.keys()]) {
-      if (!toleratedKeys.has(key)) freshnessStreaks.delete(key)
+      if (!toleratedKeys.has(key)) {freshnessStreaks.delete(key)}
     }
     let tolerated = toleratedKeys.size > 0
     for (const key of toleratedKeys) {
       const streak = (freshnessStreaks.get(key) ?? 0) + 1
       freshnessStreaks.set(key, streak)
-      if (streak > INCIDENT_FRESHNESS_TOLERANCE_SAMPLES) tolerated = false
+      if (streak > INCIDENT_FRESHNESS_TOLERANCE_SAMPLES) {tolerated = false}
     }
     if (continuityFailures.length > 0 && !tolerated) {
       freshnessStreaks.clear()
@@ -934,11 +973,11 @@ export async function runIncidentMonitor(
     const probeFailures = new Map<string, IncidentFailure[]>()
     for (const failure of thresholdFailures) {
       const key = toleratedStreakKey(failure)
-      if (key === null) continue
+      if (key === null) {continue}
       probeFailures.set(key, [...(probeFailures.get(key) ?? []), failure])
     }
     for (const key of Object.keys(state.probeStreaks)) {
-      if (!probeFailures.has(key)) delete state.probeStreaks[key]
+      if (!probeFailures.has(key)) {delete state.probeStreaks[key]}
     }
     const sustainedProbeFailures: IncidentFailure[] = []
     const toleratedProbeFailures: IncidentFailure[] = []

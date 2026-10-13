@@ -31,9 +31,21 @@ test('no workflow names the retired generic production deploy identity', async (
     'deploy-relay-production-same-cap.yml',
     'deploy-relay-production.yml',
     'operate-relay-asia-admission.yml',
+    'operate-relay-production-cell-flags.yml',
     'operate-relay-production-rehome-job.yml',
     'publish-relay-production.yml'
   ].map((name) => relayWorkflowFile(name)).sort())
+})
+
+test('cell flag operations retain the relay-owned identity and explicit write authorization', () => {
+  const workflow = readRelayWorkflow('operate-relay-production-cell-flags.yml')
+  assert.match(workflow, /vars\.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER/)
+  assert.match(workflow, /vars\.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT/)
+  assert.doesNotMatch(workflow, /vars\.PRODUCTION_GCP_DEPLOY_SERVICE_ACCOUNT/)
+  assert.match(workflow, /vars\.ORCA_CLOUD_OPERATIONS_ENABLED == 'true'/)
+  assert.match(workflow, /default: dry-run/)
+  assert.match(workflow, /expected-generation/)
+  assert.match(workflow, /WRITE_RELAY_CELL_FLAGS <cell-id>/)
 })
 
 test('monitor workflow has no shared deploy identity fallback', async () => {

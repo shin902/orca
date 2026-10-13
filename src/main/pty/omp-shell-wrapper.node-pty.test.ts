@@ -76,7 +76,7 @@ async function runInteractivePosixPty(args: {
     cols: 100,
     rows: 30,
     cwd: args.cwd,
-    env: { ...args.env, ORCA_TEST_RCFILE: rcfile }
+    env: { ...args.env, ORCA_TEST_RCFILE: rcfile, LC_ALL: 'C' }
   })
 
   let output = ''

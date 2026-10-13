@@ -28,7 +28,7 @@ function rehomeProtocol({ regionalRehomeProtocol }) {
 
 // Only cells off the root pool default get a pool line, so the caller states whether to expect one.
 function databasePoolMax({ databasePoolMax: value }) {
-  if (value === undefined) return undefined
+  if (value === undefined) {return undefined}
   const pool = Number(value)
   if (!/^[0-9]+$/.test(String(value)) || pool < 1 || pool > 100) {
     throw new Error('same-cap Terraform plan has an invalid database pool max')
@@ -41,21 +41,21 @@ export function parseCapacityPlanArguments(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index]
     const value = argv[index + 1]
-    if (!key?.startsWith('--') || value === undefined) throw new Error('invalid arguments')
+    if (!key?.startsWith('--') || value === undefined) {throw new Error('invalid arguments')}
     values[key.slice(2)] = value
   }
   for (const key of ['mode', 'cell-id', 'hard-cap', 'unobserved-bound']) {
-    if (!values[key]) throw new Error(`missing --${key}`)
+    if (!values[key]) {throw new Error(`missing --${key}`)}
   }
   if (!['cell', 'bootstrap-cell', 'same-cap-cell', 'same-cap-image'].includes(values.mode)) {
     throw new Error('--mode must be cell, bootstrap-cell, same-cap-cell, or same-cap-image')
   }
   const integer = (key) => {
     const value = Number(values[key])
-    if (!Number.isSafeInteger(value) || value < 0) throw new Error(`--${key} is invalid`)
+    if (!Number.isSafeInteger(value) || value < 0) {throw new Error(`--${key} is invalid`)}
     return value
   }
-  if (!values.image) throw new Error('missing --image')
+  if (!values.image) {throw new Error('missing --image')}
   if (
     ['bootstrap-cell', 'same-cap-cell'].includes(values.mode) &&
     !values['capacity-service-account']
@@ -68,7 +68,7 @@ export function parseCapacityPlanArguments(argv) {
       !values['rehome-director-service-account'] ||
       !values['rehome-audience'] ||
       !['0', '1', '3'].includes(values['regional-rehome-protocol']))
-  ) throw new Error('same-cap validation requires rollback image and rehome trust config')
+  ) {throw new Error('same-cap validation requires rollback image and rehome trust config')}
   if (values.mode !== 'same-cap-cell' && values['regional-rehome-protocol'] !== undefined) {
     throw new Error('--regional-rehome-protocol applies only to same-cap-cell validation')
   }
@@ -100,7 +100,7 @@ export function parseCapacityPlanArguments(argv) {
 }
 
 function mutations(plan) {
-  if (!Array.isArray(plan.resource_changes)) throw new Error('Terraform plan has no resource changes')
+  if (!Array.isArray(plan.resource_changes)) {throw new Error('Terraform plan has no resource changes')}
   return plan.resource_changes.filter(({ change }) => {
     const actions = change?.actions
     return Array.isArray(actions) && !actions.every((action) => ['no-op', 'read'].includes(action))
@@ -112,7 +112,7 @@ function sameActions(change, expected) {
 }
 
 function changedPaths(before, after, path = []) {
-  if (Object.is(before, after)) return []
+  if (Object.is(before, after)) {return []}
   const beforeObject = before !== null && typeof before === 'object'
   const afterObject = after !== null && typeof after === 'object'
   if (!beforeObject || !afterObject || Array.isArray(before) !== Array.isArray(after)) {
@@ -123,8 +123,8 @@ function changedPaths(before, after, path = []) {
 }
 
 function unknownPaths(value, path = []) {
-  if (value === true) return [path.join('.')]
-  if (value === null || typeof value !== 'object') return []
+  if (value === true) {return [path.join('.')]}
+  if (value === null || typeof value !== 'object') {return []}
   return Object.entries(value).flatMap(([key, nested]) => unknownPaths(nested, [...path, key]))
 }
 
@@ -160,19 +160,24 @@ function canonicalResourcePaths(change, paths) {
   )
 }
 
-function bootstrapRestartNormalizationPaths(change, mode) {
-  if (!['bootstrap-cell', 'same-cap-cell', 'same-cap-image'].includes(mode)) return []
-  const policyMatches =
-    valueAtPath(change.change.before, 'update_policy.0.minimal_action') === 'RESTART' &&
-    valueAtPath(change.change.after, 'update_policy.0.minimal_action') === 'REPLACE'
-  const priorVersion = valueAtPath(change.change.before, 'version.0.name')
-  const versionMatches =
-    typeof priorVersion === 'string' &&
-    /^0\/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+00:00$/.test(priorVersion) &&
-    valueAtPath(change.change.after, 'version.0.name') === 'primary'
-  return policyMatches && versionMatches
-    ? ['update_policy.0.minimal_action', 'version.0.name']
-    : []
+// What relay-gce-cells.tf declares for these MIG fields (a test pins the two together). A gcloud
+// rolling action, like the stranded recovery's old one, rewrites the version label and persists
+// its flags into the update policy outside Terraform; a later plan then reverts them. Moving back
+// to the declared value is reconciliation, never a capacity change, so it is the only move allowed.
+export const DECLARED_MANAGER_FIELDS = Object.freeze({
+  'version.0.name': 'primary',
+  'update_policy.0.type': 'PROACTIVE',
+  'update_policy.0.minimal_action': 'REPLACE',
+  'update_policy.0.most_disruptive_allowed_action': 'REPLACE',
+  'update_policy.0.replacement_method': 'RECREATE',
+  'update_policy.0.max_surge_fixed': 0,
+  'update_policy.0.max_unavailable_fixed': 1
+})
+
+function declaredManagerReconciliationPaths(change) {
+  return Object.entries(DECLARED_MANAGER_FIELDS)
+    .filter(([path, declared]) => valueAtPath(change.change.after, path) === declared)
+    .map(([path]) => path)
 }
 
 function requireOnlyPaths(change, allowed, required = [], allowedUnknown = new Set()) {
@@ -199,7 +204,7 @@ function relayImage(script) {
   })
   const relayCommands = commands.filter((command) =>
     command.filter((line) => line === '  --name orca-relay \\').length === 1)
-  if (relayCommands.length !== 1) return null
+  if (relayCommands.length !== 1) {return null}
   const command = relayCommands[0]
   const image = /^  '([^'\n]+@sha256:[a-f0-9]{64})'$/.exec(command.at(-1))?.[1]
   const digests = [...command.join('\n').matchAll(/'([^'\n]+@sha256:[a-f0-9]{64})'/g)]
@@ -214,7 +219,7 @@ function normalizedStartupScript(
   stripDatabasePoolMax = false
 ) {
   const image = relayImage(script)
-  if (!image) throw new Error('cell plan startup script has no Relay image')
+  if (!image) {throw new Error('cell plan startup script has no Relay image')}
   const digest = image.split('@')[1]
   const capacityAssignment =
     /^  printf 'ORCA_RELAY_CELL_CONNECTION_(?:HARD_CAP|UNOBSERVED_BOUND)=%s\\n' '[0-9]+'$/
@@ -353,7 +358,7 @@ function takeCellBackendUpdate(changes, config) {
 }
 
 function plannedResources(module) {
-  if (!module) return []
+  if (!module) {return []}
   return [
     ...(module.resources ?? []),
     ...(module.child_modules ?? []).flatMap(plannedResources)
@@ -372,7 +377,7 @@ function requireDesiredPlannedCell(plan, config) {
   const managerAddress = `google_compute_instance_group_manager.relay_gce_cell[${JSON.stringify(config.cellId)}]`
   const template = resources.find(({ address }) => address === templateAddress)?.values
   const manager = resources.find(({ address }) => address === managerAddress)?.values
-  if (!template || !manager) throw new Error('convergence plan has no exact planned C26 state')
+  if (!template || !manager) {throw new Error('convergence plan has no exact planned C26 state')}
   requireDesiredStartupScript(template.metadata_startup_script, config)
   const templateReference = canonicalResource(template.self_link ?? template.id)
   const managerReference = canonicalResource(manager.version?.[0]?.instance_template)
@@ -381,7 +386,7 @@ function requireDesiredPlannedCell(plan, config) {
   }
 }
 
-function validateManagerUpdate(manager, config) {
+function validateManagerUpdate(manager) {
   if (!sameActions(manager, ['update'])) {
     throw new Error('cell plan has unexpected MIG actions')
   }
@@ -392,14 +397,18 @@ function validateManagerUpdate(manager, config) {
     'version.0.instance_template'
   ])
   const managerUnknown = unknownPaths(manager.change.after_unknown)
+  const moved = changedPaths(manager.change.before, manager.change.after)
+  const reconciled = declaredManagerReconciliationPaths(manager).filter((path) =>
+    moved.includes(path))
+  // A plan that only reconciles declared fields leaves the template where it is.
   requireOnlyPaths(
     manager,
     new Set([
       'version.0.instance_template',
-      ...bootstrapRestartNormalizationPaths(manager, config.mode),
+      ...reconciled,
       ...managerUnknown.filter((path) => managerComputed.has(path))
     ]),
-    ['version.0.instance_template'],
+    reconciled.length > 0 ? [] : ['version.0.instance_template'],
     managerComputed
   )
 }
@@ -514,7 +523,7 @@ function cellPlan(plan, changes, config) {
     ['metadata_startup_script'],
     templateComputed
   )
-  validateManagerUpdate(manager, config)
+  validateManagerUpdate(manager)
   requireReplacementTemplateDependency(plan, template, manager)
   const beforeScript = template.change.before?.metadata_startup_script
   const script = template.change.after?.metadata_startup_script
@@ -561,7 +570,7 @@ function convergenceCellPlan(plan, changes, config) {
   ) {
     throw new Error('cell convergence plan changes outside the exact template and MIG')
   }
-  if (manager) validateManagerUpdate(manager, config)
+  if (manager) {validateManagerUpdate(manager)}
   if (obsoleteTemplates.some((change) => !sameActions(change, ['delete']))) {
     throw new Error('cell convergence plan has unexpected obsolete-template actions')
   }
@@ -587,11 +596,11 @@ export function validateCapacityPlan(plan, config) {
     (!SERVICE_ACCOUNT_EMAIL.test(config.rehomeDirectorServiceAccount ?? '') ||
       !/^https:\/\/[^/]+\/v1\/admin\/host-drain$/.test(config.rehomeAudience ?? '') ||
       !/^.+@sha256:[a-f0-9]{64}$/.test(config.rollbackImage ?? ''))
-  ) throw new Error('same-cap Terraform plan has invalid rehome trust config')
+  ) {throw new Error('same-cap Terraform plan has invalid rehome trust config')}
   if (
     config.mode === 'same-cap-image' &&
     !/^.+@sha256:[a-f0-9]{64}$/.test(config.rollbackImage ?? '')
-  ) throw new Error('same-cap image Terraform plan has an invalid rollback image')
+  ) {throw new Error('same-cap image Terraform plan has an invalid rollback image')}
   const { rest: changes, backendUpdate } = takeCellBackendUpdate(mutations(plan), config)
   const backend = backendUpdate.length > 0 ? { backendUpdate } : {}
   if (changes.length === 0) {
@@ -609,8 +618,8 @@ export function validateCapacityPlan(plan, config) {
       deposed === undefined &&
       JSON.stringify(change?.actions) === JSON.stringify(['create', 'delete'])
   )
-  if (replacement) cellPlan(plan, changes, config)
-  else convergenceCellPlan(plan, changes, config)
+  if (replacement) {cellPlan(plan, changes, config)}
+  else {convergenceCellPlan(plan, changes, config)}
   const obsoleteTemplates = changes.filter(
     ({ address, deposed }) => address === templateAddress && typeof deposed === 'string'
   )

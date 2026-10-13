@@ -21,8 +21,9 @@ export const notification = (seq: number, kind: 'alert' | 'dismiss' = 'alert'): 
   body: '',
   kind
 })
-// ownDatabase: advisory locks are database-wide, so a test that holds a global key must not share one.
-export async function fixture({ ownDatabase = false } = {}) {
+// Device and compatibility advisory locks are database-wide, not schema-local.
+// Independent fixtures must not share them, even when their tables have separate search paths.
+export async function fixture({ ownDatabase = true } = {}) {
   const databaseUrl = durablePushTestDatabaseUrl
   if (databaseUrl && !process.env.CI && new URL(databaseUrl).port !== '55440')
     throw new Error('isolated_postgres_port_required')

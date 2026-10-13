@@ -20,7 +20,34 @@ const UNGATED = relayWorkflowFile('verify.yml')
 const relayWorkflows = () => workflowFiles().filter((file) => file !== UNGATED)
 
 test('the copy carries every relay workflow', () => {
-  assert.equal(relayWorkflows().length, 25)
+  assert.deepEqual(relayWorkflows().sort(), [
+    'cloud-bootstrap-relay-staging-capacity.yml',
+    'cloud-deploy-relay-asia-topology.yml',
+    'cloud-deploy-relay-fence-broker.yml',
+    'cloud-deploy-relay-production-capacity-job.yml',
+    'cloud-deploy-relay-production-capacity.yml',
+    'cloud-deploy-relay-production-director.yml',
+    'cloud-deploy-relay-production-multi-target.yml',
+    'cloud-deploy-relay-production-same-cap-job.yml',
+    'cloud-deploy-relay-production-same-cap.yml',
+    'cloud-deploy-relay-production.yml',
+    'cloud-deploy-relay-staging-gce-candidate.yml',
+    'cloud-deploy-relay-staging.yml',
+    'cloud-monitor-relay-clock-skew.yml',
+    'cloud-monitor-relay-production-job.yml',
+    'cloud-monitor-relay-production.yml',
+    'cloud-operate-relay-asia-admission.yml',
+    'cloud-operate-relay-production-cell-flags.yml',
+    'cloud-operate-relay-production-rehome-job.yml',
+    'cloud-operate-relay-production-rehome.yml',
+    'cloud-power-relay-staging.yml',
+    'cloud-prove-relay-asia-staging.yml',
+    'cloud-prove-relay-staging-capacity.yml',
+    'cloud-publish-relay-production.yml',
+    'cloud-push-deploy.yml',
+    'cloud-recover-relay-staging-c4-image.yml',
+    'cloud-requeue-relay-staging-c4-recovery.yml'
+  ])
 })
 
 // Why: workflow_run chains match by display name, not filename. Renaming a file is safe; renaming

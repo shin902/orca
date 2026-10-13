@@ -4,6 +4,7 @@ import type {
   AgentJournalSubmission
 } from '../../../../shared/agent-session-journal-types'
 import type { NativeChatSettledTurns } from '../../../../shared/native-chat-turn-status'
+import type { AgentSessionLatestTurn } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentHostClock } from '../../../../shared/structured-agent-session-reducer'
 import { selectStructuredAgentTurnBars } from '../../../../shared/structured-agent-session-turn-timing'
 import {
@@ -12,30 +13,25 @@ import {
 } from '../../../../shared/structured-agent-turn-clock-anchor'
 
 /** Host-recorded turn timing for the structured lane: settled durations straight
- *  off the journal, the transcript key that owns the running turn's bar, each
- *  row's owning turn, and a
- *  skew-free start for the live counter whose host-to-local conversion is latched
- *  once per turn. */
+ *  off the journal, and a skew-free start for the live counter whose host-to-local
+ *  conversion is latched once per turn. */
 export function useStructuredAgentTurnTiming(
   {
     items,
     submissions,
+    latestTurn,
     hostClock
   }: {
     items: readonly AgentJournalRenderItem[]
     submissions: readonly AgentJournalSubmission[]
+    latestTurn?: AgentSessionLatestTurn | null
     hostClock?: StructuredAgentHostClock | null
   },
   turnId: string | null
-): {
-  settledTurns: NativeChatSettledTurns
-  workingStartedAt: number | null
-  activeTurnOpenedBy: string | null
-  turnKeysByItemId: ReadonlyMap<string, string>
-} {
-  const { settledTurns, runningTiming, activeTurnOpenedBy, turnKeysByItemId } = useMemo(
-    () => selectStructuredAgentTurnBars(items, submissions, turnId),
-    [items, submissions, turnId]
+): { settledTurns: NativeChatSettledTurns; workingStartedAt: number | null } {
+  const { settledTurns, runningTiming } = useMemo(
+    () => selectStructuredAgentTurnBars(items, submissions, turnId, latestTurn),
+    [items, submissions, turnId, latestTurn]
   )
   const [latch, setLatch] = useState<StructuredAgentTurnClockLatch | null>(null)
   // Stamp during render (React's derive-from-props pattern) so the first paint of
@@ -50,10 +46,5 @@ export function useStructuredAgentTurnTiming(
   if (step.latch !== latch) {
     setLatch(step.latch)
   }
-  return {
-    settledTurns,
-    workingStartedAt: step.workingStartedAt,
-    activeTurnOpenedBy,
-    turnKeysByItemId
-  }
+  return { settledTurns, workingStartedAt: step.workingStartedAt }
 }

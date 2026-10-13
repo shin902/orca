@@ -179,6 +179,22 @@ it('deletes a batch once it is finished, and keeps it only for a retry', async (
   expect(await batchCount(db)).toBe(0)
 })
 
+it('isolates device-scope locks held by unrelated fixtures', async () => {
+  const first = await fixture()
+  const second = await fixture()
+  await first.store.accept('host', 'phone', notification(1))
+  await second.store.accept('host', 'phone', notification(2))
+  const paused = pauseAfter(first.db, DEVICE_HEAD_SQL)
+  const holding = new DurablePushStore(paused.wrapped, first.clock).claim()
+  await paused.atCandidate
+  try {
+    expect((await within(second.store.claim(), 2_000))?.notification.notificationSeq).toBe(2)
+  } finally {
+    paused.release()
+    await holding
+  }
+})
+
 it('frees a device held by a crashed worker once its lease lapses', async () => {
   const { db, store, clock, advance } = await fixture()
   await store.accept('host', 'phone', notification(1))

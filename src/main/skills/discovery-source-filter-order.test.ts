@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as SkillMetadata from '../../shared/skill-metadata'
 
 const summarizeSkillMarkdown = vi.hoisted(() => vi.fn())
@@ -20,6 +20,15 @@ vi.mock('../../shared/skill-metadata', async (importOriginal) => {
 import { discoverSkills } from './discovery'
 
 describe('native skill source filtering', () => {
+  beforeEach(() => {
+    // Environment-owned roots must not escape the fixture home.
+    vi.stubEnv('HERMES_HOME', '')
+    vi.stubEnv('LOCALAPPDATA', '')
+    summarizeSkillMarkdown.mockClear()
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
   it('serves home and bundled filters from one raw root observation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-skill-source-filter-'))
     const homeSkill = join(root, '.codex', 'skills', 'home-skill')

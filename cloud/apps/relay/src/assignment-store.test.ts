@@ -2,7 +2,11 @@ import { ASSIGNMENT_LIMITS } from '@orca-cloud/relay-contract'
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RelayCellConfig } from './config.js'
-import { RelayAssignmentStore, STRANDED_MIGRATION_ABANDON_MS } from './assignment-store.js'
+import {
+  RelayAssignmentRowBusyError,
+  RelayAssignmentStore,
+  STRANDED_MIGRATION_ABANDON_MS
+} from './assignment-store.js'
 import {
   encodeMembership,
   type CellAdmissionMembership
@@ -137,7 +141,7 @@ class OneShotInventoryFailureDatabase implements RelayDatabase {
       this.retryLocks.push('inventory-nowait-failed')
       throw new Error('database_lock_unavailable')
     }
-    if (this.failed && inventory) this.retryLocks.push('inventory-first')
+    if (this.failed && inventory) {this.retryLocks.push('inventory-first')}
     if (this.failed && sql.includes('FROM relay_assignments')) {
       this.retryLocks.push(options.failIfUnavailable ? 'assignment-nowait' : 'assignment')
     }
@@ -241,7 +245,7 @@ class SeedBetweenAssignmentLanesDatabase implements RelayDatabase {
     operation: (transaction: RelayDatabase) => Promise<T>,
     options?: RelayTransactionOptions
   ): Promise<T> {
-    if (this.armed && ++this.transactions === 2) await this.seed()
+    if (this.armed && ++this.transactions === 2) {await this.seed()}
     return await this.delegate.transaction(operation, options)
   }
 
@@ -1195,7 +1199,7 @@ describe('RelayAssignmentStore', () => {
       await store.setCellEnabled('cell-a', false)
       const evidence = cellFenceEvidence()
       await store.prepareCellFenceAttempt(evidence)
-      if (status === 'aborted') await store.abortCellFenceAttempt(evidence)
+      if (status === 'aborted') {await store.abortCellFenceAttempt(evidence)}
       if (status === 'completed') {
         await store.bindCellFencePlanGeneration(evidence, evidence.planObjectGeneration)
         await store.startCellFenceApply(
@@ -1658,6 +1662,39 @@ describe('RelayAssignmentStore', () => {
     ).toEqual([{ activity_kind: 'control', cell_id: 'cell-b' }])
   })
 
+  it('skips a host whose row is busy and still evacuates the rest of the dead cell', async () => {
+    let now = 100
+    const cells: RelayCellConfig[] = [
+      { id: 'cell-a', url: 'https://relay-a.example.com', capacityRequests: 10 },
+      { id: 'cell-b', url: 'https://relay-b.example.com', capacityRequests: 10 }
+    ]
+    const store = await setupWithHeartbeats(() => now, cells)
+    for (const cell of cells) {await heartbeat(store, cell)}
+    await store.setCellEnabled('cell-b', false)
+    const busy = { userId: 'a-busy', relayHostId: 'host000000000001' }
+    const later = { userId: 'b-later', relayHostId: 'host000000000002' }
+    expect(await store.assign(busy)).toMatchObject({ cellId: 'cell-a' })
+    expect(await store.assign(later)).toMatchObject({ cellId: 'cell-a' })
+    await store.setCellEnabled('cell-b', true)
+
+    now += 45_001
+    await heartbeat(store, cells[1]!)
+    // The sweep reaches the busy host first: its own release holds its row.
+    const assign = store.assign.bind(store)
+    vi.spyOn(store, 'assign').mockImplementation(async (identity, ...rest) => {
+      if (identity.relayHostId === busy.relayHostId) {throw new RelayAssignmentRowBusyError()}
+      return await assign(identity, ...rest)
+    })
+
+    expect(await store.evacuateDeadCells()).toBe(1)
+    expect(await store.resolve(later)).toMatchObject({ cellId: 'cell-b' })
+    expect(
+      await database!.query(`SELECT cell_id FROM relay_assignments WHERE user_id = ?`, [
+        busy.userId
+      ])
+    ).toEqual([{ cell_id: 'cell-a' }])
+  })
+
   it('does not let an unfenced capped cell starve eligible legacy recovery', async () => {
     let now = 100
     const cells: RelayCellConfig[] = [
@@ -1672,7 +1709,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     await store.setCellEnabled('cell-b', false)
     await store.setCellEnabled('cell-c', false)
     const cappedIdentity = { userId: 'a-capped', relayHostId: 'host000000000001' }
@@ -2439,6 +2476,39 @@ describe('RelayAssignmentStore', () => {
     })
   })
 
+  it('logs the drift reconciliation corrects, once, after it commits', async () => {
+    const store = await setup(() => 100, [
+      { id: 'cell-a', url: 'https://relay-a.example.com', capacityRequests: 10 },
+      { id: 'cell-b', url: 'https://relay-b.example.com', capacityRequests: 10 }
+    ])
+    const grant = await store.assign({ userId: 'user-a', relayHostId: 'host000000000001' })
+    await database!.query(`UPDATE relay_cells SET reserved_requests = 5 WHERE cell_id = ?`, [
+      grant.cellId
+    ])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    let lines: string[]
+    try {
+      await store.cellEvacuationStatus('cell-a', 'cell-b', true)
+      await store.cellEvacuationStatus('cell-a', 'cell-b', true)
+    } finally {
+      lines = warn.mock.calls.map((call) => String(call[0]))
+      warn.mockRestore()
+    }
+
+    const drift = lines
+      .filter((line) => line.includes('orca_relay_reservation_drift'))
+      .map((line) => JSON.parse(line) as unknown)
+    expect(drift).toEqual([
+      {
+        event: 'orca_relay_reservation_drift',
+        cellId: grant.cellId,
+        reservedRequests: 5,
+        leaseUnits: 1
+      }
+    ])
+  })
+
   it('blocks aggregate fenced completion on assignment accounting mismatch', async () => {
     let now = 100
     const cells = [
@@ -2495,7 +2565,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     await store.setCellEnabled('cell-b', false)
     await store.setCellEnabled('cell-c', false)
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
@@ -2609,11 +2679,11 @@ describe('RelayAssignmentStore', () => {
       cellId: 'cell-b',
       assignmentEpoch: migration.assignmentEpoch
     })
-    if (releaseSourceControl) await store.releaseActivity(identity, sourceControl)
-    if (disableSource) await store.setCellEnabled('cell-a', false)
+    if (releaseSourceControl) {await store.releaseActivity(identity, sourceControl)}
+    if (disableSource) {await store.setCellEnabled('cell-a', false)}
     // The desktop leaves the half-migrated target, then an operator disables that cell.
     await store.releaseActivity(identity, targetControl)
-    if (disableTarget) await store.setCellEnabled('cell-b', false)
+    if (disableTarget) {await store.setCellEnabled('cell-b', false)}
     return { store, identity }
   }
 
@@ -3085,7 +3155,7 @@ describe('RelayAssignmentStore', () => {
     let attempts = 0
     vi.spyOn(store, 'supersedeRegisteredEvacuation').mockImplementation(async (...args) => {
       attempts++
-      if (attempts === 2) expect(await store.abortExpiredEvacuations()).toBe(1)
+      if (attempts === 2) {expect(await store.abortExpiredEvacuations()).toBe(1)}
       return await supersede(...args)
     })
 
@@ -3525,7 +3595,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3633,7 +3703,7 @@ describe('RelayAssignmentStore', () => {
       heartbeatTtlMs: 45_000
     })
     await store.reconcileCells(cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3685,7 +3755,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3749,7 +3819,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-d', url: 'https://relay-d.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     const sourceControl = await store.activateControl(identity, {
@@ -3816,7 +3886,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => 100, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3865,7 +3935,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {

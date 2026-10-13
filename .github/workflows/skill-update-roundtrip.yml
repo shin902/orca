@@ -10,7 +10,6 @@ on:
       - 'skills/**'
       - 'resources/skills/**'
       - 'config/scripts/verify-skill-update-roundtrip.mjs'
-      - 'config/scripts/skill-update-roundtrip-workflow.test.mjs'
       - 'src/main/skills/skill-freshness-eligibility.ts'
       - 'src/shared/skill-freshness.ts'
       - '.github/workflows/skill-update-roundtrip.yml'
@@ -49,6 +48,10 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Fetch official skill snapshot releases
+        run: >-
+          git fetch --no-tags --filter=blob:none https://github.com/stablyai/orca.git
+          refs/tags/v1.4.178-rc.2:refs/tags/v1.4.178-rc.2
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json

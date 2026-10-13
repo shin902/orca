@@ -18,6 +18,7 @@ import {
 } from './database.js'
 import { runAssignmentCleanup } from './assignment-cleanup-steps.js'
 import { runRelayBackgroundOperation } from './relay-background-operation.js'
+import { readPostgresLockWaitSample } from './postgres-lock-wait-sample.js'
 import { jitteredSweepIntervalMs } from './relay-sweep-schedule.js'
 import { observedRelayRequests } from './relay-observability.js'
 import { startRegionalRehomeWorker } from './regional-rehome-worker.js'
@@ -32,7 +33,8 @@ const database = await openRelayDatabaseAtBoot({
   databaseUrl: config.databaseUrl,
   dataDir: config.dataDir,
   poolMax: config.databasePoolMax,
-  applicationName: `orca-relay/${config.role}/${config.cellId}`
+  applicationName: `orca-relay/${config.role}/${config.cellId}`,
+  appliesPostgresSchema: config.role !== 'cell'
 })
 await reconcileCellAdmissionAtStartup(config, new RelayAssignmentStore(database))
 const {
@@ -68,7 +70,7 @@ const inventorySnapshotTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const snapshot = await readAssignmentInventorySnapshot(database, Date.now())
-        for (const line of formatAssignmentInventorySnapshot(snapshot)) console.warn(line)
+        for (const line of formatAssignmentInventorySnapshot(snapshot)) {console.warn(line)}
       }, '[orca-relay] inventory snapshot failed')
     }, 60_000)
   : null
@@ -76,7 +78,7 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const inventory = await readRegisteredMigrationInventory(database, Date.now())
-        for (const line of formatRegisteredMigrationInventory(inventory)) console.warn(line)
+        for (const line of formatRegisteredMigrationInventory(inventory)) {console.warn(line)}
         console.log(
           JSON.stringify({
             event: 'orca_relay_region_correction_outcomes',
@@ -87,8 +89,23 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
       }, '[orca-relay] migration inventory failed')
     }, 5 * 60_000)
   : null
+// Directors only: one role's view covers every backend, and cells roll separately.
+// Single-flight, so a slow database never stacks samples on the 3-slot pool.
+let lockWaitSampling = false
+const lockWaitSampleTimer = roleOwnsAssignmentMaintenance(config.role)
+  ? setInterval(() => {
+      if (database.dialect !== 'postgres' || lockWaitSampling) {return}
+      lockWaitSampling = true
+      void runRelayBackgroundOperation(async () => {
+        observability.recordDatabaseLockWaitSample(await readPostgresLockWaitSample(database))
+      }, '[orca-relay] lock wait sample failed').finally(() => {
+        lockWaitSampling = false
+      })
+    }, 5_000)
+  : null
 cleanupTimer?.unref()
 assignmentCleanupTimer?.unref()
+lockWaitSampleTimer?.unref()
 inventorySnapshotTimer?.unref()
 migrationInventoryTimer?.unref()
 observability.start(() => ({
@@ -133,15 +150,16 @@ server.listen(config.port, () => {
 })
 
 const shutdown = (): void => {
-  if (cleanupTimer) clearInterval(cleanupTimer)
-  if (assignmentCleanupTimer) clearInterval(assignmentCleanupTimer)
-  if (inventorySnapshotTimer) clearInterval(inventorySnapshotTimer)
-  if (migrationInventoryTimer) clearInterval(migrationInventoryTimer)
+  if (cleanupTimer) {clearInterval(cleanupTimer)}
+  if (assignmentCleanupTimer) {clearInterval(assignmentCleanupTimer)}
+  if (inventorySnapshotTimer) {clearInterval(inventorySnapshotTimer)}
+  if (migrationInventoryTimer) {clearInterval(migrationInventoryTimer)}
+  if (lockWaitSampleTimer) {clearInterval(lockWaitSampleTimer)}
   observability.stop()
   heartbeat?.stop()
   regionalRehomeWorker?.stop()
   sessions.drain(0)
-  server.close(() => void database.close())
+  server.close(() => void database.close().catch(() => undefined))
 }
 process.once('SIGTERM', shutdown)
 process.once('SIGINT', shutdown)

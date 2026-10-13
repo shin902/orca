@@ -8,10 +8,26 @@ const ADMISSION_WORKFLOW = relayWorkflowPath('operate-relay-asia-admission.yml')
 const STAGING_WORKFLOW = relayWorkflowPath('prove-relay-asia-staging.yml')
 const STAGING_CELL = 'staging-gce-c4'
 const C27 = 'production-gce-c27'
+const ASIA_REGION = 'asia-east2'
+const US_REGION = 'us-central1'
 // Each canary proves its own cell under production load; C28/C29 promotion consumes only C27's.
 const PRODUCTION_CANARIES = {
-  [C27]: { kind: 'production-c27-canary', origin: 'https://c27.relay.onorca.dev' },
-  'production-gce-c30': { kind: 'production-c30-canary', origin: 'https://c30.relay.onorca.dev' }
+  [C27]: { kind: 'production-c27-canary', origin: 'https://c27.relay.onorca.dev', region: ASIA_REGION },
+  'production-gce-c30': {
+    kind: 'production-c30-canary', origin: 'https://c30.relay.onorca.dev', region: ASIA_REGION
+  },
+  'production-gce-c31': {
+    kind: 'production-c31-canary', origin: 'https://c31.relay.onorca.dev', region: ASIA_REGION
+  },
+  'production-gce-c32': {
+    kind: 'production-c32-canary', origin: 'https://c32.relay.onorca.dev', region: US_REGION
+  },
+  'production-gce-c33': {
+    kind: 'production-c33-canary', origin: 'https://c33.relay.onorca.dev', region: US_REGION
+  },
+  'production-gce-c34': {
+    kind: 'production-c34-canary', origin: 'https://c34.relay.onorca.dev', region: ASIA_REGION
+  }
 }
 const DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/
 const SHA_PATTERN = /^[a-f0-9]{40}$/
@@ -34,13 +50,13 @@ function object(value, label) {
 
 function positiveInteger(value, label) {
   const number = Number(value)
-  if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${label} is invalid`)
+  if (!Number.isSafeInteger(number) || number < 1) {throw new Error(`${label} is invalid`)}
   return number
 }
 
 function instant(value, label) {
   const date = new Date(value)
-  if (!Number.isFinite(date.valueOf())) throw new Error(`${label} is invalid`)
+  if (!Number.isFinite(date.valueOf())) {throw new Error(`${label} is invalid`)}
   return date
 }
 
@@ -50,8 +66,8 @@ function exactCells(actual, expected) {
 }
 
 function source(input, environment, workflow) {
-  if (input.repository !== REPOSITORY) throw new Error('repository is invalid')
-  if (!SHA_PATTERN.test(input.commitSha)) throw new Error('commit SHA is invalid')
+  if (input.repository !== REPOSITORY) {throw new Error('repository is invalid')}
+  if (!SHA_PATTERN.test(input.commitSha)) {throw new Error('commit SHA is invalid')}
   return {
     repository: input.repository,
     workflow,
@@ -63,7 +79,7 @@ function source(input, environment, workflow) {
 }
 
 function baseEvidence(input, environment, cells, workflow = ADMISSION_WORKFLOW) {
-  if (!DIGEST_PATTERN.test(input.imageDigest)) throw new Error('image digest is invalid')
+  if (!DIGEST_PATTERN.test(input.imageDigest)) {throw new Error('image digest is invalid')}
   return {
     version: 1,
     source: source(input, environment, workflow),
@@ -85,7 +101,12 @@ export function buildStagingEvidence(input) {
   }
   assertLoadReports(launch, expectedLoad)
   const metrics = runtimeMetrics(input.logs, start, end, STAGING_CELL)
-  assertPassingRuntimeMetrics(metrics, 'staging proof', 1)
+  assertPassingRuntimeMetrics(metrics, 'staging proof')
+  // Staging is quiet, so its one intentional sticky fallback must be the only one.
+  if (
+    number(metrics.regionFallbacks, 'regionFallbacks') !== 1 ||
+    number(metrics.usRegionFallbacks, 'usRegionFallbacks') !== 1
+  ) {throw new Error('staging proof regionFallbacks did not match the intentional probes')}
   const minimumConcurrentSplices = expectedLoad.splices - expectedLoad.wedgedReaders
   if (
     metrics.targetControlsMax < expectedLoad.controls ||
@@ -107,7 +128,7 @@ export function buildStagingEvidence(input) {
 }
 
 function loadReports(value, label) {
-  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} must be sharded`)
+  if (!Array.isArray(value) || value.length < 2) {throw new Error(`${label} must be sharded`)}
   return value.map((report) => object(report, label))
 }
 
@@ -173,7 +194,7 @@ function assertLoadReports(reports, expected) {
     'rampConnectionFailures', 'steadyConnectionFailures', 'transitionConnectionFailures',
     'unexpectedCloses', 'protocolErrors', 'refreshErrors', 'socketErrors', 'failedSplices'
   ]) {
-    if (total(reports, key) !== 0) throw new Error(`staging load ${key} must be zero`)
+    if (total(reports, key) !== 0) {throw new Error(`staging load ${key} must be zero`)}
   }
   const peakActiveSplices = total(reports, 'peakActiveSplices')
   if (
@@ -185,7 +206,7 @@ function assertLoadReports(reports, expected) {
     total(reports, 'completedSplices') !== expected.splices - expected.wedgedReaders ||
     total(reports, 'slowReaderSplicesCompleted') !== expected.slowReaders ||
     total(reports, 'wedgedReaderSplicesClosed') !== expected.wedgedReaders
-  ) throw new Error('staging mixed load evidence does not match')
+  ) {throw new Error('staging mixed load evidence does not match')}
   if (
     total(reports, 'regionalFallbacksProved') !== 0 ||
     total(reports, 'oldClientUsFirstProved') !== 1 ||
@@ -196,7 +217,7 @@ function assertLoadReports(reports, expected) {
     reports.some((report) => report.requestUnitOverflowReason !== null) ||
     total(reports, 'rebindProbesOpened') !== 2 ||
     reports.some((report) => report.rebindOverflowReason !== null)
-  ) throw new Error('staging launch-path evidence does not match')
+  ) {throw new Error('staging launch-path evidence does not match')}
   const readerReports = reports.filter(
     (report) => report.configuredSlowReaderSplices + report.configuredWedgedReaderSplices > 0
   )
@@ -205,7 +226,7 @@ function assertLoadReports(reports, expected) {
   }
   for (const report of reports) {
     const queue = report.readerQueueEvidence
-    if (!Array.isArray(queue)) throw new Error('staging reader queue evidence is invalid')
+    if (!Array.isArray(queue)) {throw new Error('staging reader queue evidence is invalid')}
     if (expected.slowReaders === 0 && queue.length !== 0) {
       throw new Error('control load unexpectedly contains reader queue evidence')
     }
@@ -218,10 +239,10 @@ function assertLoadReports(reports, expected) {
       number(queue[0]?.increaseBytes, 'reader queue increase') <= 0 ||
       queue[0].peakBytes - queue[0].baselineBytes !== queue[0].increaseBytes ||
       report.readerQueuedBytesPeak !== queue[0].increaseBytes
-    )) throw new Error('staging reader queue evidence is not causal')
+    )) {throw new Error('staging reader queue evidence is not causal')}
     if (expected.slowReaders > 0 && !ownsReaderPressure && (
       queue.length !== 0 || report.readerQueuedBytesPeak !== 0
-    )) throw new Error('non-owner shard contains reader queue evidence')
+    )) {throw new Error('non-owner shard contains reader queue evidence')}
   }
   for (const report of reports) {
     if (
@@ -230,12 +251,12 @@ function assertLoadReports(reports, expected) {
         GENERATOR_EVENT_LOOP_P99_MS_LIMIT ||
       number(report.generatorRssGrowthMiB, 'generator RSS growth') >=
         GENERATOR_RSS_GROWTH_MIB_LIMIT
-    ) throw new Error('staging load generator has insufficient headroom')
+    ) {throw new Error('staging load generator has insufficient headroom')}
     const shutdown = object(report.shutdownEvidence, 'load shutdown evidence')
     if (
       shutdown.peerShutdowns !== report.controls || shutdown.activeControls !== 0 ||
       shutdown.activeSplices !== 0 || shutdown.reconnectTimers !== 0
-    ) throw new Error('staging load cleanup is incomplete')
+    ) {throw new Error('staging load cleanup is incomplete')}
   }
 }
 
@@ -249,19 +270,19 @@ function number(value, label) {
 function sumMap(value, label) {
   const entries = Object.entries(object(value ?? {}, label))
   return entries.reduce((total, [key, count]) => {
-    if (!key) throw new Error(`${label} is invalid`)
+    if (!key) {throw new Error(`${label} is invalid`)}
     return total + number(count, label)
   }, 0)
 }
 
 function assertCoverage(timestamps, start, end, label) {
-  if (timestamps.length === 0) throw new Error(`${label} has no samples`)
+  if (timestamps.length === 0) {throw new Error(`${label} has no samples`)}
   const ordered = timestamps.map((value) => instant(value, `${label} timestamp`).valueOf())
     .sort((left, right) => left - right)
   if (
     ordered[0] > start.valueOf() + MAX_LOG_EDGE_GAP_MS ||
     ordered.at(-1) < end.valueOf() - MAX_LOG_EDGE_GAP_MS
-  ) throw new Error(`${label} does not cover the canary window`)
+  ) {throw new Error(`${label} does not cover the canary window`)}
   if (ordered.some((timestamp, index) => index > 0 && timestamp - ordered[index - 1] > MAX_LOG_SAMPLE_GAP_MS)) {
     throw new Error(`${label} has a sampling gap`)
   }
@@ -269,8 +290,8 @@ function assertCoverage(timestamps, start, end, label) {
 
 function pointValue(point) {
   const value = point?.value
-  if (typeof value?.doubleValue === 'number') return value.doubleValue
-  if (typeof value?.int64Value === 'string') return Number(value.int64Value)
+  if (typeof value?.doubleValue === 'number') {return value.doubleValue}
+  if (typeof value?.int64Value === 'string') {return Number(value.int64Value)}
   return NaN
 }
 
@@ -287,7 +308,7 @@ function cloudSqlMaximum(response, start, end) {
 
 function productionCanary(cellId) {
   const canary = PRODUCTION_CANARIES[cellId]
-  if (!canary) throw new Error('canary cell is not a reviewed production Asia canary')
+  if (!canary) {throw new Error('canary cell is not a reviewed production Asia canary')}
   return { ...canary, label: cellId.split('-').at(-1).toUpperCase() }
 }
 
@@ -301,8 +322,19 @@ export function buildProductionCanaryEvidence(input) {
   const load = object(input.loadReport, `${canary.label} load report`)
   assertCanaryLoad(load, input.cellId)
   // Directors show a steady relay_cells lock and pool-wait baseline unrelated to the canary cell.
-  const metrics = runtimeMetrics(input.logs, start, end, input.cellId, { gateDirectorDatabase: false })
-  assertPassingRuntimeMetrics(metrics, `${canary.label} canary`)
+  const metrics = runtimeMetrics(input.logs, start, end, input.cellId, {
+    gateDirectorDatabase: false, region: canary.region
+  })
+  assertPassingRuntimeMetrics(metrics, `${canary.label} canary`, canary.region)
+  // Fallbacks are keyed by the host's target region. US-targeted ones come from unhinted or
+  // US-preferring hosts an Asia cell cannot cause, so they are recorded but not gated. A US
+  // cell gates neither: the US-targeted baseline is nonzero while the US fleet is full.
+  if (
+    canary.region === ASIA_REGION &&
+    number(metrics.asiaRegionFallbacks, 'asiaRegionFallbacks') !== 0
+  ) {
+    throw new Error(`${canary.label} canary asiaRegionFallbacks must be zero`)
+  }
   metrics.cloudSqlBackendsMax = cloudSqlMaximum(input.cloudSql, start, end)
   assertPassingCanary(metrics, input.cellId)
   return {
@@ -326,8 +358,8 @@ function assertCanaryLoad(report, cellId) {
     report.peakActive !== 1 || report.steadyMinimumActive !== 1 ||
     report.configuredSplices !== 1 || report.peakActiveSplices !== 1 ||
     report.completedSplices !== 1 || report.failedSplices !== 0
-  ) throw new Error(`${label} control and splice canary did not match`)
-  // Placement picks the least-loaded general Asia cell, so the canary's own control must be on it.
+  ) {throw new Error(`${label} control and splice canary did not match`)}
+  // Placement picks the least-loaded general cell in the canary's region, so the control lands on it.
   if (JSON.stringify(report.assignedCellOrigins) !== JSON.stringify([origin])) {
     throw new Error(`${label} canary load was not placed only on ${label}`)
   }
@@ -335,22 +367,24 @@ function assertCanaryLoad(report, cellId) {
     'connectionFailures', 'unexpectedCloses', 'protocolErrors',
     'refreshErrors', 'socketErrors'
   ]) {
-    if (number(report[key], key) !== 0) throw new Error(`${label} canary ${key} must be zero`)
+    if (number(report[key], key) !== 0) {throw new Error(`${label} canary ${key} must be zero`)}
   }
   const shutdown = object(report.shutdownEvidence, `${label} load shutdown evidence`)
   if (
     shutdown.peerShutdowns !== 1 || shutdown.activeControls !== 0 ||
     shutdown.activeSplices !== 0 || shutdown.reconnectTimers !== 0
-  ) throw new Error(`${label} load cleanup is incomplete`)
+  ) {throw new Error(`${label} load cleanup is incomplete`)}
 }
 
-function runtimeMetrics(logs, start, end, targetCellId, { gateDirectorDatabase = true } = {}) {
+function runtimeMetrics(
+  logs, start, end, targetCellId, { gateDirectorDatabase = true, region = ASIA_REGION } = {}
+) {
   const entries = logs.map((entry) => object(entry, 'runtime metric entry'))
   const directorEntries = entries.filter((entry) => entry.jsonPayload?.role === 'director')
   const cellEntries = entries.filter((entry) =>
     entry.jsonPayload?.role === 'cell' &&
     entry.jsonPayload?.cellId === targetCellId &&
-    entry.jsonPayload?.region === 'asia-east2'
+    entry.jsonPayload?.region === region
   )
   assertCoverage(directorEntries.map((entry) => entry.timestamp), start, end, 'director metrics')
   assertCoverage(cellEntries.map((entry) => entry.timestamp), start, end, `${targetCellId} metrics`)
@@ -370,6 +404,12 @@ function runtimeMetrics(logs, start, end, targetCellId, { gateDirectorDatabase =
     regionFallbacks: directorPayloads.reduce(
       (total, payload) => total + sumMap(payload.regionFallbacksDelta, 'region fallbacks'), 0
     ),
+    asiaRegionFallbacks: directorPayloads.reduce(
+      (total, payload) => total + number(
+        payload.regionFallbacksDelta?.['asia-east2'] ?? 0,
+        'Asia region fallbacks'
+      ), 0
+    ),
     usRegionFallbacks: directorPayloads.reduce(
       (total, payload) => total + number(
         payload.regionFallbacksDelta?.['us-central1'] ?? 0,
@@ -378,7 +418,15 @@ function runtimeMetrics(logs, start, end, targetCellId, { gateDirectorDatabase =
     ),
     unavailableRegions: directorPayloads.reduce(
       (total, payload) => total + sumMap(payload.unavailableRegionsDelta, 'unavailable regions'), 0
-    )
+    ),
+    // Only a US canary reads US selections, so Asia evidence keeps its exact field set.
+    ...(region === US_REGION ? {
+      usSelections: directorPayloads.reduce(
+        (total, payload) =>
+          total + number(payload.selectedRegionsDelta?.[US_REGION] ?? 0, 'US selections'),
+        0
+      )
+    } : {})
   }
   // Director before cell per metric keeps the old validation order.
   const split = (read) => ({ director: read(directorPayloads), cell: read(cellPayloads) })
@@ -424,27 +472,26 @@ function runtimeMetrics(logs, start, end, targetCellId, { gateDirectorDatabase =
   }
 }
 
-function assertPassingRuntimeMetrics(metrics, label, expectedRegionFallbacks = 0) {
-  if (number(metrics.asiaSelections, 'Asia selections') < 1) {
+// Fleet-level proof that director metrics flowed; the placement check proves the cell itself.
+function assertPassingRuntimeMetrics(metrics, label, region = ASIA_REGION) {
+  if (region === US_REGION) {
+    if (number(metrics.usSelections, 'US selections') < 1) {
+      throw new Error(`${label} observed no US selections`)
+    }
+  } else if (number(metrics.asiaSelections, 'Asia selections') < 1) {
     throw new Error(`${label} observed no Asia selections`)
-  }
-  if (
-    number(metrics.regionFallbacks, 'regionFallbacks') !== expectedRegionFallbacks ||
-    number(metrics.usRegionFallbacks, 'usRegionFallbacks') !== expectedRegionFallbacks
-  ) {
-    throw new Error(`${label} regionFallbacks did not match the intentional probes`)
   }
   for (const key of [
     'unavailableRegions', 'relaySqlFailures', 'databasePoolWaitingMax'
   ]) {
-    if (number(metrics[key], key) !== 0) throw new Error(`${label} ${key} must be zero`)
+    if (number(metrics[key], key) !== 0) {throw new Error(`${label} ${key} must be zero`)}
   }
   if (
     number(metrics.databasePoolWaitersMax, 'databasePoolWaitersMax') >
       DATABASE_POOL_TRANSIENT_WAITERS_MAX ||
     number(metrics.databasePoolWaitMsMax, 'databasePoolWaitMsMax') >
       DATABASE_POOL_TRANSIENT_WAIT_MS_MAX
-  ) throw new Error(`${label} transient database pool pressure exceeded its bound`)
+  ) {throw new Error(`${label} transient database pool pressure exceeded its bound`)}
 }
 
 function assertPassingCanary(metrics, cellId) {
@@ -452,7 +499,7 @@ function assertPassingCanary(metrics, cellId) {
   if (
     number(metrics.targetControlsMax, `${label} controls`) < 1 ||
     number(metrics.targetSplicesMax, `${label} splices`) < 1
-  ) throw new Error(`${label} canary traffic did not reach ${label}`)
+  ) {throw new Error(`${label} canary traffic did not reach ${label}`)}
   if (number(metrics.cloudSqlBackendsMax, 'Cloud SQL backends') >= CLOUD_SQL_LIMIT) {
     throw new Error(`Cloud SQL backends must remain below ${CLOUD_SQL_LIMIT}`)
   }
@@ -474,7 +521,7 @@ function assertProvenance(evidence, run, expected) {
     expected.repository !== REPOSITORY ||
     evidenceSource.environment !== expected.environment ||
     evidenceSource.commitSha !== expected.commitSha
-  ) throw new Error('evidence workflow provenance does not match')
+  ) {throw new Error('evidence workflow provenance does not match')}
 }
 
 export function verifyRolloutEvidence(evidence, run, expected) {
@@ -484,7 +531,7 @@ export function verifyRolloutEvidence(evidence, run, expected) {
     throw new Error('evidence kind is invalid')
   }
   assertProvenance(evidence, run, expected)
-  if (evidence.imageDigest !== expected.imageDigest) throw new Error('evidence image digest does not match')
+  if (evidence.imageDigest !== expected.imageDigest) {throw new Error('evidence image digest does not match')}
   if (!exactCells(evidence.topology?.cellIds, expected.cellIds)) {
     throw new Error('evidence topology does not match')
   }
@@ -492,7 +539,7 @@ export function verifyRolloutEvidence(evidence, run, expected) {
   if (
     expected.selectorGeneration !== undefined &&
     evidence.topology.selectorGeneration !== expected.selectorGeneration
-  ) throw new Error('evidence selector generation does not match')
+  ) {throw new Error('evidence selector generation does not match')}
   const now = instant(expected.now, 'verification time')
   const proofTime = instant(evidence.window?.endedAt, 'evidence time')
   const maxAgeMs = expected.kind === 'staging-asia-readiness' ? 24 * 60 * 60_000 : 6 * 60 * 60_000
@@ -502,7 +549,7 @@ export function verifyRolloutEvidence(evidence, run, expected) {
   const canaryCell = Object.keys(PRODUCTION_CANARIES)
     .find((cellId) => PRODUCTION_CANARIES[cellId].kind === expected.kind)
   if (canaryCell) {
-    if (!exactCells(expected.cellIds, [canaryCell])) throw new Error('evidence topology does not match')
+    if (!exactCells(expected.cellIds, [canaryCell])) {throw new Error('evidence topology does not match')}
     const start = instant(evidence.window?.startedAt, 'canary start')
     if (proofTime.valueOf() - start.valueOf() < CANARY_MINIMUM_MS) {
       throw new Error(`${productionCanary(canaryCell).label} canary window is shorter than 5 minutes`)
@@ -528,7 +575,7 @@ function argumentsMap(argv) {
 
 function required(values, key) {
   const value = values.get(key)
-  if (!value) throw new Error(`missing --${key}`)
+  if (!value) {throw new Error(`missing --${key}`)}
   return value
 }
 
@@ -567,7 +614,7 @@ async function main(argv) {
     }), null, 2)}\n`)
     return
   }
-  if (!['verify-staging', 'verify-c27'].includes(command)) throw new Error('invalid evidence command')
+  if (!['verify-staging', 'verify-c27'].includes(command)) {throw new Error('invalid evidence command')}
   const kind = command === 'verify-staging' ? 'staging-asia-readiness' : 'production-c27-canary'
   verifyRolloutEvidence(
     JSON.parse(readFileSync(required(values, 'evidence'), 'utf8')),
@@ -586,4 +633,4 @@ async function main(argv) {
   writeFileSync(output, 'verified\n')
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main(process.argv.slice(2))
+if (process.argv[1] === import.meta.filename) {await main(process.argv.slice(2))}

@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import type {
   SkillBundleFileIdentity,
@@ -17,29 +15,12 @@ import {
 import { describeObservedSkillFile, skillPackageDigest } from './skill-package-identity'
 import { MAXIMUM_PLUGIN_SCAN_ENTRIES } from './skill-plugin-cache-scan'
 import { getSkillFreshnessDisplayStatus } from '../../renderer/src/lib/skill-freshness-display-status'
+import { gitTreeShaInFixture } from './skill-package-git-tree-fixture'
 
 const temporaryDirectories: string[] = []
 
-const execFileAsync = promisify(execFile)
-
-// Why: hashed with real git, not Orca's tree-sha port — the port validating
-// itself here would prove nothing about matching the updater lock's hash.
-async function gitTreeShaOf(directory: string): Promise<string> {
-  const gitDir = await mkdtemp(join(tmpdir(), 'orca-skill-hash-'))
-  temporaryDirectories.push(gitDir)
-  const env = {
-    ...process.env,
-    GIT_DIR: gitDir,
-    GIT_WORK_TREE: directory,
-    GIT_INDEX_FILE: join(gitDir, 'scratch-index'),
-    GIT_CONFIG_GLOBAL: join(gitDir, 'no-config'),
-    GIT_CONFIG_SYSTEM: join(gitDir, 'no-config')
-  }
-  await execFileAsync('git', ['init', '--quiet'], { env, cwd: directory })
-  await execFileAsync('git', ['add', '-A'], { env, cwd: directory })
-  const { stdout } = await execFileAsync('git', ['write-tree'], { env, cwd: directory })
-  return stdout.trim()
-}
+const gitTreeShaOf = (directory: string): Promise<string> =>
+  gitTreeShaInFixture(directory, temporaryDirectories)
 
 function snapshot(releaseRevision: number, markdown: string): SkillKnownSnapshot {
   const observed = describeObservedSkillFile('SKILL.md', Buffer.from(markdown), false)
@@ -156,7 +137,13 @@ async function writeSkillLockHash(homeDir: string, skillFolderHash: string): Pro
   )
 }
 
+beforeEach(() => {
+  vi.stubEnv('HERMES_HOME', '')
+  vi.stubEnv('LOCALAPPDATA', '')
+})
+
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(
     temporaryDirectories
       .splice(0)

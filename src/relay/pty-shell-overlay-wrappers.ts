@@ -1,7 +1,9 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { getPosixOmpShellWrapper } from '../main/pty/omp-shell-wrapper'
+import { ORCA_CLI_POSIX_PATH_RESTORE } from '../shared/orca-cli-shell-path'
 import { getPosixCodexShellLaunchPreflight } from '../shared/codex-shell-function'
+import { BASH_DEBUG_TRAP_REENTRANCY_GUARD } from '../main/bash-prompt-command-composition'
 import {
   BASH_FEATURE_CHANNEL_BLOCK,
   BASH_PROMPT_COMMAND_COMPOSITION_BLOCK,
@@ -73,6 +75,7 @@ fi
 [[ -n "\${ORCA_OPENCODE_CONFIG_DIR:-}" ]] && export OPENCODE_CONFIG_DIR="\${ORCA_OPENCODE_CONFIG_DIR}"
 [[ -n "\${ORCA_MIMOCODE_HOME:-}" ]] && export MIMOCODE_HOME="\${ORCA_MIMOCODE_HOME}"
 [[ -n "\${ORCA_REMOTE_CLI_BIN_DIR:-}" ]] && case ":$PATH:" in *:"\${ORCA_REMOTE_CLI_BIN_DIR}":*) ;; *) export PATH="\${ORCA_REMOTE_CLI_BIN_DIR}:$PATH" ;; esac
+${ORCA_CLI_POSIX_PATH_RESTORE}
 ${getPosixOmpShellWrapper()}
 ${getPosixCodexShellLaunchPreflight()}${BASH_HISTFILE_RESTORE_BLOCK}
 # Why: SSH bash sessions need the same command lifecycle markers as local
@@ -93,6 +96,7 @@ __orca_osc133_prompt_done() {
   trap '__orca_osc133_preexec' DEBUG
 }
 __orca_osc133_preexec() {
+${BASH_DEBUG_TRAP_REENTRANCY_GUARD}
   if [[ -n "\${__orca_prompt_status_capture_command:-}" && "$BASH_COMMAND" == "$__orca_prompt_status_capture_command" ]]; then
     unset __orca_initial_prompt
     __orca_in_legacy_prompt_wrapper=1

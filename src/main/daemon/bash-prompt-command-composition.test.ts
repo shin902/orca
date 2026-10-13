@@ -29,7 +29,14 @@ function runInteractiveBash(
     {
       input,
       encoding: 'utf8',
-      env: { ...process.env, HOME: tempHome, ORCA_SHELL_FEATURES: 'ready', TERM: 'xterm' },
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        ORCA_SHELL_FEATURES: 'ready',
+        TERM: 'dumb',
+        // Keep the host's login hooks out of this shell contract test.
+        WEZTERM_SHELL_SKIP_ALL: '1'
+      },
       timeout: 5000
     }
   )
@@ -314,6 +321,19 @@ PROMPT_COMMAND='printf "PROMPT_REMATCH:<%s>\\n" "\${BASH_REMATCH[1]-unset}"'
     expect(output).not.toContain('OLD_FT:<true>')
     expect(output).toContain('NEW_FT:<true>')
     expectLifecycle(output, 0)
+  })
+
+  itWithBash('releases the functrace guard when a user DEBUG trap returns early', () => {
+    const profile = [
+      'set -T',
+      'trap \'printf "RETURN_DEBUG:<%s>\\n" "$BASH_COMMAND"; if [[ "$BASH_COMMAND" == true ]]; then return 0 2>/dev/null || true; fi\' DEBUG',
+      'PROMPT_COMMAND=\'printf "RETURN_HOOK\\n"\''
+    ].join('\n')
+    const output = runInteractiveBash(profile, tempHome)
+
+    expect(output).toContain('RETURN_DEBUG:<true>')
+    expect(output).toContain('RETURN_DEBUG:<false>')
+    expectLifecycle(output)
   })
 
   itWithBash('does not resurrect a removed DEBUG trap with functrace enabled', () => {

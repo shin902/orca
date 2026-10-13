@@ -16,6 +16,10 @@ import {
 } from './agent-generated-tab-title-copy'
 import { getAgentStatusHooksDescription, getAgentStatusHooksTitle } from './agent-status-hooks-copy'
 import {
+  getAgentWorkspaceTrustDescription,
+  getAgentWorkspaceTrustTitle
+} from './agent-workspace-trust-copy'
+import {
   SettingsSegmentedControl,
   SettingsSubsectionHeader,
   SettingsSwitchRow
@@ -257,7 +261,13 @@ export function AgentsPane({
       />
       <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
       {!isPairedWebClientWindow() ? (
-        <CodexTerminalServerIsolationSetting settings={settings} updateSettings={updateSettings} />
+        <>
+          <AgentWorkspaceTrustSetting settings={settings} updateSettings={updateSettings} />
+          <CodexTerminalServerIsolationSetting
+            settings={settings}
+            updateSettings={updateSettings}
+          />
+        </>
       ) : null}
       <AgentGeneratedTabTitlesSetting settings={settings} updateSettings={updateSettings} />
       {!isPairedWebClientWindow() ? (
@@ -295,6 +305,21 @@ export function AgentStatusHooksSetting({ settings, updateSettings }: AgentsPane
         checked={enabled}
         onChange={() => updateSettings({ agentStatusHooksEnabled: !enabled })}
         ariaLabel={getAgentStatusHooksTitle()}
+      />
+    </section>
+  )
+}
+
+export function AgentWorkspaceTrustSetting({ settings, updateSettings }: AgentsPaneProps) {
+  const enabled = settings.agentWorkspaceTrustEnabled !== false
+  return (
+    <section className="space-y-3">
+      <SettingsSwitchRow
+        label={getAgentWorkspaceTrustTitle()}
+        description={getAgentWorkspaceTrustDescription()}
+        checked={enabled}
+        onChange={() => updateSettings({ agentWorkspaceTrustEnabled: !enabled })}
+        ariaLabel={getAgentWorkspaceTrustTitle()}
       />
     </section>
   )

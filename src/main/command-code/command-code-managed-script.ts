@@ -44,7 +44,7 @@ export function buildCommandCodeManagedScript(
     '  while [ -n "$__orca_pid" ] && [ "$__orca_pid" != "0" ] && [ "$__orca_pid" != "1" ]; do',
     '    __orca_value=""',
     '    if [ -r "/proc/$__orca_pid/environ" ]; then',
-    '      __orca_value=$(tr "\\000" "\\n" < "/proc/$__orca_pid/environ" 2>/dev/null | sed -n "s/^${__orca_name}=//p" | head -n 1)',
+    '      __orca_value=$(tr "\\000" "\\n" 2>/dev/null < "/proc/$__orca_pid/environ" | sed -n "s/^${__orca_name}=//p" | head -n 1)',
     '    fi',
     '    if [ -z "$__orca_value" ]; then',
     '      __orca_value=$(ps eww -p "$__orca_pid" -o command= 2>/dev/null | tr " " "\\n" | sed -n "s/^${__orca_name}=//p" | head -n 1)',
