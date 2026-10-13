@@ -24,7 +24,7 @@ describe('public assignment reconnect lane', () => {
     const blocked = 'cccccccccccccccc'
     const pending = new Map<string, ReturnType<typeof deferred<RelayAssignment>>>()
     const assign = vi.fn(async ({ relayHostId }: { relayHostId: string }) => {
-      if (relayHostId === reconnecting) return assignment('cell-r', reconnecting)
+      if (relayHostId === reconnecting) {return assignment('cell-r', reconnecting)}
       const operation = deferred<RelayAssignment>()
       pending.set(relayHostId, operation)
       return await operation.promise
@@ -133,7 +133,7 @@ describe('public assignment reconnect lane', () => {
     const busy = 'bbbbbbbbbbbbbbbb'
     const next = 'nnnnnnnnnnnnnnnn'
     const assign = vi.fn(async ({ relayHostId }: { relayHostId: string }) => {
-      if (relayHostId === busy) throw new RelayAssignmentRowBusyError()
+      if (relayHostId === busy) {throw new RelayAssignmentRowBusyError()}
       return assignment('cell-n', next)
     })
     const resolve = vi.fn(async ({ relayHostId }: { relayHostId: string }) =>

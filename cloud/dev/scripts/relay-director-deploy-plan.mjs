@@ -38,18 +38,18 @@ const MEMBERSHIP_KEYS = ['existingOnly', 'migrationOnly', 'general']
 
 export function requireDigest(value, label) {
   if (typeof value !== 'string' || !DIGEST.test(value))
-    throw new Error(`${label} is not an immutable sha256 digest`)
+    {throw new Error(`${label} is not an immutable sha256 digest`)}
   return value
 }
 
 export function requireCommit(value, label) {
   if (typeof value !== 'string' || !COMMIT.test(value))
-    throw new Error(`${label} is not a full commit SHA`)
+    {throw new Error(`${label} is not a full commit SHA`)}
   return value
 }
 
 function requireGeneration(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} is invalid`)
+  if (!Number.isSafeInteger(value) || value < 0) {throw new Error(`${label} is invalid`)}
   return value
 }
 
@@ -83,7 +83,7 @@ export function parseSelector(value, label) {
     selector.membership[key] = [...cells].sort()
   }
   const all = MEMBERSHIP_KEYS.flatMap((key) => selector.membership[key])
-  if (new Set(all).size !== all.length) throw new Error(`${label} membership has duplicates`)
+  if (new Set(all).size !== all.length) {throw new Error(`${label} membership has duplicates`)}
   return selector
 }
 
@@ -128,9 +128,9 @@ const INTEGER_INPUT = /^(0|[1-9][0-9]*)$/
 export function validateDispatchInputs(inputs) {
   for (const [key, value] of Object.entries(inputs)) {
     if (typeof value !== 'string' || value.startsWith('<'))
-      throw new Error(`input ${key} is not resolved`)
+      {throw new Error(`input ${key} is not resolved`)}
     if (key.endsWith('digest') && !DIGEST.test(value))
-      throw new Error(`input ${key} is not a sha256 digest`)
+      {throw new Error(`input ${key} is not a sha256 digest`)}
     if (
       (key.includes('generation') ||
         ['not-before', 'monitor-run-id', 'monitor-run-attempt'].includes(key)) &&
@@ -284,7 +284,7 @@ export function revisionDigest(revision, label) {
   const image = revision?.spec?.containers?.[0]?.image
   const [repository, digest] = String(image ?? '').split('@')
   if (repository !== IMAGE_REPOSITORY)
-    throw new Error(`${label} does not run the production relay image`)
+    {throw new Error(`${label} does not run the production relay image`)}
   return requireDigest(digest, `${label} image`)
 }
 
@@ -300,14 +300,14 @@ export function rehomeResultFromLog(log) {
   let found
   for (const line of String(log).split('\n')) {
     const start = line.indexOf('{"event":"relay_regional_rehome_control"')
-    if (start < 0) continue
+    if (start === -1) {continue}
     try {
       found = JSON.parse(line.slice(start).trim())
     } catch {
       // A truncated or echoed line is not the result.
     }
   }
-  if (!found) throw new Error('the rehome run printed no control result')
+  if (!found) {throw new Error('the rehome run printed no control result')}
   return {
     mode: found.mode,
     recovered: found.recovered,
@@ -328,6 +328,6 @@ export function pausedGeneration(result) {
 }
 
 export function admissionInspectResult(result) {
-  if (result?.mode !== 'inspect') throw new Error('admission result is not an inspect')
+  if (result?.mode !== 'inspect') {throw new Error('admission result is not an inspect')}
   return parseSelector(result, 'admission selector')
 }

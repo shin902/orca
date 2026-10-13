@@ -48,6 +48,10 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Fetch official skill snapshot releases
+        run: >-
+          git fetch --no-tags --filter=blob:none https://github.com/stablyai/orca.git
+          refs/tags/v1.4.178-rc.2:refs/tags/v1.4.178-rc.2
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json

@@ -433,8 +433,8 @@ test('records but does not gate organic US-targeted fallbacks during a canary', 
 function usCanaryInput(cellId) {
   const input = canaryInput({}, cellId)
   for (const entry of input.logs) {
-    if (entry.jsonPayload.role === 'cell') entry.jsonPayload.region = 'us-central1'
-    else entry.jsonPayload.selectedRegionsDelta = { 'asia-east2': 1, 'us-central1': 3 }
+    if (entry.jsonPayload.role === 'cell') {entry.jsonPayload.region = 'us-central1'}
+    else {entry.jsonPayload.selectedRegionsDelta = { 'asia-east2': 1, 'us-central1': 3 }}
   }
   return input
 }
@@ -462,7 +462,7 @@ test('builds and verifies C32 and C33 canaries from their own us-central1 metric
     )
     const noUs = usCanaryInput(cellId)
     for (const entry of noUs.logs) {
-      if (entry.jsonPayload.role === 'director') entry.jsonPayload.selectedRegionsDelta = { 'asia-east2': 1 }
+      if (entry.jsonPayload.role === 'director') {entry.jsonPayload.selectedRegionsDelta = { 'asia-east2': 1 }}
     }
     assert.throws(() => buildProductionCanaryEvidence(noUs), /observed no US selections/)
   }

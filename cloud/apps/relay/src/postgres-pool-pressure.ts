@@ -48,7 +48,7 @@ export function isPostgresPoolConnectTimeout(error: unknown): boolean {
 // socket counts only at the acquire boundary: retrying a statement whose commit
 // outcome is unknown is not safe.
 export function isPostgresPoolConnectFailure(error: unknown): boolean {
-  if (isPostgresPoolConnectTimeout(error)) return true
+  if (isPostgresPoolConnectTimeout(error)) {return true}
   return (
     errorMessage(error).includes(CONNECTION_TERMINATED_MESSAGE) &&
     isPostgresPoolAcquireFailure(error)
@@ -96,7 +96,7 @@ export class PostgresPoolPressure {
     const startedAt = this.now()
     let waiter: symbol | undefined
     const markWaiting = (): void => {
-      if (waiter) return
+      if (waiter) {return}
       waiter = Symbol()
       this.waiters.set(waiter, startedAt)
       this.waitersMax = Math.max(this.waitersMax, this.waiters.size)
@@ -108,7 +108,7 @@ export class PostgresPoolPressure {
       try {
         const waitingBefore = this.pool.waitingCount
         const connection = this.pool.connect()
-        if (this.pool.waitingCount > waitingBefore) markWaiting()
+        if (this.pool.waitingCount > waitingBefore) {markWaiting()}
         return await markedAcquire(connection, releaseSlot)
       } catch (error) {
         releaseSlot()
@@ -136,7 +136,7 @@ export class PostgresPoolPressure {
       if (timeoutMs > 0) {
         queued.timer = setTimeout(() => {
           const index = this.generalQueue.indexOf(queued)
-          if (index >= 0) this.generalQueue.splice(index, 1)
+          if (index !== -1) {this.generalQueue.splice(index, 1)}
           reject(new Error(POOL_CONNECT_TIMEOUT_MESSAGES[0]))
         }, timeoutMs)
         queued.timer.unref?.()
@@ -148,7 +148,7 @@ export class PostgresPoolPressure {
   private generalSlotRelease(): () => void {
     let released = false
     return () => {
-      if (released) return
+      if (released) {return}
       released = true
       const next = this.generalQueue.shift()
       if (!next) {
@@ -190,7 +190,7 @@ export class PostgresPoolPressure {
 
   // Instantaneous, unlike peekCounts, which holds the last interval's maxima.
   oldestWaitMs(): number {
-    if (this.waiters.size === 0) return 0
+    if (this.waiters.size === 0) {return 0}
     return Math.max(0, this.now() - Math.min(...this.waiters.values()))
   }
 
@@ -217,7 +217,7 @@ async function markedAcquire(
   try {
     client = await connection
   } catch (error) {
-    if (typeof error === 'object' && error !== null) poolAcquireFailures.add(error)
+    if (typeof error === 'object' && error !== null) {poolAcquireFailures.add(error)}
     throw error
   }
   return guardCheckedOutClient(client, onRelease)

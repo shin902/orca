@@ -61,13 +61,13 @@ export function attributeCellExits(input: {
   let counted = 0
   const unattributed: string[] = []
   for (const [instanceId, exits] of input.exitsByInstance) {
-    if (exits <= 0) continue
+    if (exits <= 0) {continue}
     const cellId = input.cellByInstance.get(instanceId) ?? null
     if (cellId === null || !input.configuredCellIds.has(cellId)) {
       unattributed.push(instanceId)
       continue
     }
-    if (cellId === input.targetCellId || !input.placementCellIds.has(cellId)) continue
+    if (cellId === input.targetCellId || !input.placementCellIds.has(cellId)) {continue}
     counted += exits
   }
   return { counted, unattributed: unattributed.sort() }
@@ -78,7 +78,7 @@ export function preDrainSampleWindowMinutes(hostCount: number): number {
     throw new Error('pre-drain sample host count is invalid')
   }
   const band = PRE_DRAIN_SAMPLE_WINDOWS.find((entry) => hostCount <= entry.maxHosts)
-  if (!band) throw new Error('pre-drain sample host count is invalid')
+  if (!band) {throw new Error('pre-drain sample host count is invalid')}
   return band.minutes
 }
 
@@ -161,7 +161,7 @@ function continuityKey(failure: IncidentFailure): string {
 
 function bumpStreaks(streaks: Map<string, number>, keys: Set<string>): Map<string, number> {
   const next = new Map<string, number>()
-  for (const key of keys) next.set(key, (streaks.get(key) ?? 0) + 1)
+  for (const key of keys) {next.set(key, (streaks.get(key) ?? 0) + 1)}
   return next
 }
 
@@ -225,7 +225,7 @@ export async function runPreDrainSample(input: {
     const probeKeys = new Set<string>()
     for (const failure of breaches) {
       const key = toleratedStreakKey(failure)
-      if (key !== null) probeKeys.add(key)
+      if (key !== null) {probeKeys.add(key)}
     }
     probeStreaks = bumpStreaks(probeStreaks, probeKeys)
     const tripped = [
@@ -238,7 +238,7 @@ export async function runPreDrainSample(input: {
         (continuityStreaks.get(continuityKey(failure)) ?? 0) >
           INCIDENT_FRESHNESS_TOLERANCE_SAMPLES)
     ]
-    if (tripped.length > 0) throw new PreDrainSampleTripped(tripped, samples)
+    if (tripped.length > 0) {throw new PreDrainSampleTripped(tripped, samples)}
     const windowDone = now() - startedMs >= windowMs
     if (windowDone && failures.length > 0) {
       overrunSamples += 1

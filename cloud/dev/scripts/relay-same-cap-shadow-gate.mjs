@@ -56,12 +56,12 @@ const READ_MAX_BUFFER_BYTES = 256 * 1024 * 1024
 export function parseShadowGateArguments(argv) {
   const values = new Map()
   for (let index = 0; index < argv.length; index += 2) {
-    if (!argv[index].startsWith('--')) throw new Error(`expected a flag, got ${argv[index]}`)
+    if (!argv[index].startsWith('--')) {throw new Error(`expected a flag, got ${argv[index]}`)}
     values.set(argv[index].slice(2), argv[index + 1])
   }
   const required = (name, pattern) => {
     const value = values.get(name) ?? ''
-    if (!pattern.test(value)) throw new Error(`--${name} is not acceptable: ${value}`)
+    if (!pattern.test(value)) {throw new Error(`--${name} is not acceptable: ${value}`)}
     return value
   }
   const optionalCount = (name) => (values.get(name) ? Number(required(name, COUNT)) : null)
@@ -87,11 +87,11 @@ export function parseShadowGateArguments(argv) {
   if (!SAME_CAP_DRAIN_PACE_WINDOWS_MS.includes(config.drainPaceWindowMs)) {
     throw new Error(`--drain-pace-window-ms is not acceptable: ${config.drainPaceWindowMs}`)
   }
-  if (config.drainSettledAt) parseTimestamp(config.drainSettledAt, '--drain-settled-at')
+  if (config.drainSettledAt) {parseTimestamp(config.drainSettledAt, '--drain-settled-at')}
   if (!config.cellHost.startsWith(`${config.cellId.replace('production-gce-', '')}.`)) {
     throw new Error(`--cell-host ${config.cellHost} is not the host of ${config.cellId}`)
   }
-  if (!config.outputFile) throw new Error('--output-file is required')
+  if (!config.outputFile) {throw new Error('--output-file is required')}
   return config
 }
 
@@ -109,7 +109,7 @@ async function retryingRead(reader, read) {
     // Every remaining read short-circuits once the budget is gone, so the gate always reaches a
     // verdict instead of being killed part-way through with nothing written.
     const remainingMs = reader.deadlineAt - reader.now()
-    if (remainingMs <= 0) return { failed: true, error: 'shadow gate read deadline exceeded' }
+    if (remainingMs <= 0) {return { failed: true, error: 'shadow gate read deadline exceeded' }}
     try {
       return { ...(await read(Math.min(reader.readTimeoutMs, remainingMs))), failed: false }
     } catch (error) {
@@ -174,9 +174,9 @@ async function readDirector503PerMinute(reader, { config, span }) {
       headers: { authorization: `Bearer ${stdout.trim()}` },
       signal: AbortSignal.timeout(timeoutMs)
     })
-    if (!response.ok) throw new Error(`Cloud Monitoring returned ${response.status}`)
+    if (!response.ok) {throw new Error(`Cloud Monitoring returned ${response.status}`)}
     const body = await response.json()
-    if (body.nextPageToken) throw new Error('Cloud Monitoring pagination is incomplete')
+    if (body.nextPageToken) {throw new Error('Cloud Monitoring pagination is incomplete')}
     return { timeSeries: body.timeSeries ?? [] }
   })
   const perMinute = {}
@@ -337,8 +337,8 @@ async function readRuntimeMetrics(reader, { cellId, window }) {
       projection,
       limit
     })
-    if (read.failed) failed = true
-    if (read.entries.length >= limit) truncated = true
+    if (read.failed) {failed = true}
+    if (read.entries.length >= limit) {truncated = true}
     for (const entry of read.entries) {
       samples.push({ timestamp: entry.timestamp, ...entry.jsonPayload })
     }
@@ -396,7 +396,7 @@ export async function evaluateShadowGate(config, {
     cloudSqlFatal: cloudSql
   }
   for (const fleetCellId of FLEET_POOL_CELL_IDS) {
-    if (fleetCellId === config.cellId) continue
+    if (fleetCellId === config.cellId) {continue}
     const metrics = await readRuntimeMetrics(reader, { cellId: fleetCellId, window })
     checks[`fleetPool:${fleetCellId}`] = judgePool({ label: fleetCellId, ...metrics })
   }
@@ -446,7 +446,7 @@ async function main() {
     })
   })
   await writeFile(config.outputFile, `${JSON.stringify(report, null, 2)}\n`)
-  if (config.summaryFile) await appendFile(config.summaryFile, renderStepSummary(report))
+  if (config.summaryFile) {await appendFile(config.summaryFile, renderStepSummary(report))}
   console.log(JSON.stringify(report, null, 2))
 }
 

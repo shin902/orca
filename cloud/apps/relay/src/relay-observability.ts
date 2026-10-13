@@ -236,7 +236,7 @@ function nearestRank(sorted: number[], percentileRank: number): number {
 }
 
 export function percentile(values: number[], percentileRank: number): number {
-  if (values.length === 0) return 0
+  if (values.length === 0) {return 0}
   return nearestRank(ascending(values), percentileRank)
 }
 
@@ -275,8 +275,8 @@ export class RelayObservability implements RelayRuntimeObserver {
   ) {}
 
   recordAuth(success: boolean): void {
-    if (success) this.deltas.authSuccesses++
-    else this.deltas.authFailures++
+    if (success) {this.deltas.authSuccesses++}
+    else {this.deltas.authFailures++}
   }
 
   recordForwardedBytes(bytes: number): void {
@@ -296,12 +296,12 @@ export class RelayObservability implements RelayRuntimeObserver {
   }
 
   recordAssignmentAdmission(outcome: AssignmentAdmissionOutcome): void {
-    if (outcome === 'sticky') this.deltas.stickyAssignments++
-    else if (outcome === 'sticky-rejected') this.deltas.stickyAssignmentRejections++
-    else if (outcome === 'placement') this.deltas.placementAssignments++
-    else if (outcome === 'drain-return') this.deltas.drainReturnAssignments++
-    else if (outcome === 'drain-return-deferred') this.deltas.drainReturnDeferrals++
-    else this.deltas.placementAssignmentRejections++
+    if (outcome === 'sticky') {this.deltas.stickyAssignments++}
+    else if (outcome === 'sticky-rejected') {this.deltas.stickyAssignmentRejections++}
+    else if (outcome === 'placement') {this.deltas.placementAssignments++}
+    else if (outcome === 'drain-return') {this.deltas.drainReturnAssignments++}
+    else if (outcome === 'drain-return-deferred') {this.deltas.drainReturnDeferrals++}
+    else {this.deltas.placementAssignmentRejections++}
   }
 
   recordAssignmentRejectionReason(lane: AssignmentAdmissionLane, reason: string): void {
@@ -323,8 +323,8 @@ export class RelayObservability implements RelayRuntimeObserver {
   }
 
   recordAdmissionServiceMs(lane: 'sticky' | 'drain-return', durationMs: number): void {
-    if (lane === 'sticky') this.deltas.stickyServiceMs.push(durationMs)
-    else this.deltas.drainReturnServiceMs.push(durationMs)
+    if (lane === 'sticky') {this.deltas.stickyServiceMs.push(durationMs)}
+    else {this.deltas.drainReturnServiceMs.push(durationMs)}
   }
 
   recordAssignmentUnavailable(cause: AssignmentUnavailableCause): void {
@@ -348,14 +348,14 @@ export class RelayObservability implements RelayRuntimeObserver {
     selectedRegion?: RelayRegion
     fallback: boolean
   }): void {
-    if (input.selectedRegion) increment(this.deltas.selectedRegions, input.selectedRegion)
-    else increment(this.deltas.unavailableRegions, input.targetRegion)
-    if (input.fallback) increment(this.deltas.regionFallbacks, input.targetRegion)
+    if (input.selectedRegion) {increment(this.deltas.selectedRegions, input.selectedRegion)}
+    else {increment(this.deltas.unavailableRegions, input.targetRegion)}
+    if (input.fallback) {increment(this.deltas.regionFallbacks, input.targetRegion)}
   }
 
   recordSql(durationMs: number, success: boolean): void {
     this.deltas.sqlQueries++
-    if (!success) this.deltas.sqlFailures++
+    if (!success) {this.deltas.sqlFailures++}
     this.deltas.sqlLatencyMsMax = Math.max(this.deltas.sqlLatencyMsMax, durationMs)
   }
 
@@ -374,8 +374,8 @@ export class RelayObservability implements RelayRuntimeObserver {
   }
 
   recordControlActivityRecovery(success: boolean): void {
-    if (success) this.deltas.controlActivityRecoveries++
-    else this.deltas.controlActivityRecoveryFailures++
+    if (success) {this.deltas.controlActivityRecoveries++}
+    else {this.deltas.controlActivityRecoveryFailures++}
   }
 
   recordReadiness(observation: RelayReadinessObservation): void {
@@ -437,18 +437,18 @@ export class RelayObservability implements RelayRuntimeObserver {
     }
     // Algorithm R: every round trip in the window keeps an equal chance of being kept.
     const slot = Math.floor(Math.random() * (observedBefore + 1))
-    if (slot < CONTROL_RTT_RESERVOIR_LIMIT) samples[slot] = rttMs
+    if (slot < CONTROL_RTT_RESERVOIR_LIMIT) {samples[slot] = rttMs}
   }
 
   start(readCounts: () => RelayProcessCounts, intervalMs = 30_000): void {
-    if (this.timer) return
+    if (this.timer) {return}
     this.eventLoop.enable()
     this.timer = setInterval(() => this.flush(readCounts()), intervalMs)
     this.timer.unref()
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer)
+    if (this.timer) {clearInterval(this.timer)}
     this.timer = null
     this.eventLoop.disable()
   }

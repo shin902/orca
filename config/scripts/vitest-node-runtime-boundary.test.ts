@@ -11,6 +11,18 @@ it('runs Node runtime contracts in Node even when the coordinator uses Bun', () 
   expect(Number(process.versions.node.split('.')[0])).toBeGreaterThanOrEqual(24)
 })
 
+it('keeps main-process GC timer fairness on the production Node runtime', () => {
+  expect(NODE_RUNTIME_INCLUDE).toContain('src/main/terminal-history-gc.test.ts')
+})
+
+it.each([
+  'src/main/daemon/repro-13767-shell-ready-marker-lost-to-exec.test.ts',
+  'src/main/daemon/shell-ready.test.ts',
+  'src/main/shell-startup-feature-channel.test.ts'
+])('keeps the real PTY shell contract %s on Node', (file) => {
+  expect(NODE_RUNTIME_INCLUDE).toContain(file)
+})
+
 function isGlobalThis(expression: ts.Expression): boolean {
   if (
     ts.isParenthesizedExpression(expression) ||

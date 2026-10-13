@@ -44,12 +44,12 @@ export function parsePreDrainSampleArgs(argv: string[]): Record<Option, string> 
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index] ?? ''
     const value = args[index + 1]
-    if (!isOption(name) || values.has(name) || !value) throw new Error(USAGE)
+    if (!isOption(name) || values.has(name) || !value) {throw new Error(USAGE)}
     values.set(name, value)
   }
   const get = (name: Option): string => {
     const value = values.get(name)
-    if (value === undefined) throw new Error(USAGE)
+    if (value === undefined) {throw new Error(USAGE)}
     return value
   }
   const parsed = {
@@ -63,7 +63,7 @@ export function parsePreDrainSampleArgs(argv: string[]): Record<Option, string> 
   if (
     !COUNT.test(parsed['--target-hosts']) ||
     !COUNT.test(parsed['--expected-selector-generation'])
-  ) throw new Error(USAGE)
+  ) {throw new Error(USAGE)}
   return parsed
 }
 
@@ -84,7 +84,7 @@ export async function runPreDrainSampleCli(
   const configuredCellIds = new Set(environment.cells.map((cell) => cell.cellId))
   const targetCellId = options['--target-cell-id']
   // An unknown target would exempt nothing and make every one of its exits unattributed.
-  if (!configuredCellIds.has(targetCellId)) throw new Error('pre-drain sample target cell is unknown')
+  if (!configuredCellIds.has(targetCellId)) {throw new Error('pre-drain sample target cell is unknown')}
   const windowMinutes = preDrainSampleWindowMinutes(Number(options['--target-hosts']))
   const expectedSelector = waveAdjustedSelector(
     await readDispatchSelector(

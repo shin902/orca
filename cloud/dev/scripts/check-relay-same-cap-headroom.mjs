@@ -7,7 +7,7 @@ import { fetchAdminOnceMore } from './relay-admin-transient-retry.mjs'
 export const MAX_HEADROOM_FRACTION = 0.8
 
 function count(value, name) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} is invalid`)
+  if (!Number.isSafeInteger(value) || value < 0) {throw new Error(`${name} is invalid`)}
   return value
 }
 
@@ -16,11 +16,11 @@ export function parseHeadroomArguments(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index]
     const value = argv[index + 1]
-    if (!key?.startsWith('--') || value === undefined) throw new Error('invalid arguments')
+    if (!key?.startsWith('--') || value === undefined) {throw new Error('invalid arguments')}
     values[key.slice(2)] = value
   }
   for (const key of ['director-origin', 'cell-origin', 'cell-id', 'general-cells']) {
-    if (!values[key]) throw new Error(`missing --${key}`)
+    if (!values[key]) {throw new Error(`missing --${key}`)}
   }
   for (const key of ['director-origin', 'cell-origin']) {
     const url = new URL(values[key])
@@ -57,7 +57,7 @@ async function adminJson(fetchImpl, url, token, body, wait) {
     { wait }
   )
   const json = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(`${new URL(url).pathname} returned ${response.status}`)
+  if (!response.ok) {throw new Error(`${new URL(url).pathname} returned ${response.status}`)}
   return json
 }
 
@@ -87,7 +87,7 @@ export async function checkSameCapHeadroom(config, overrides = {}) {
   const fetchImpl = overrides.fetch ?? fetch
   const wait = overrides.wait ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
   const token = overrides.token ?? process.env.ORCA_RELAY_ADMIN_ID_TOKEN
-  if (!token || token.length > 8_192) throw new Error('admin identity token is unavailable')
+  if (!token || token.length > 8_192) {throw new Error('admin identity token is unavailable')}
   const cellStatus = async (cellId) => {
     const { status } = await adminJson(
       fetchImpl,
@@ -96,7 +96,7 @@ export async function checkSameCapHeadroom(config, overrides = {}) {
       { v: 1, cellId },
       wait
     )
-    if (status?.cellId !== cellId) throw new Error('director status does not match the cell')
+    if (status?.cellId !== cellId) {throw new Error('director status does not match the cell')}
     return status
   }
   const runtime = await adminJson(
@@ -113,7 +113,7 @@ export async function checkSameCapHeadroom(config, overrides = {}) {
   const targetRegion = (await cellStatus(config.cellId)).region ?? null
   const cells = []
   for (const cellId of config.generalCells) {
-    if (cellId === config.cellId) continue
+    if (cellId === config.cellId) {continue}
     const status = await cellStatus(cellId)
     cells.push({ cellId, region: status.region ?? null, freeSlots: freeSlots(status) })
   }

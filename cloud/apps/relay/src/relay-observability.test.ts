@@ -34,7 +34,7 @@ const SCHEMA_KEY_ALIASES: Record<string, string> = {
   clientAcceptCredentialMsP95: 'clientAcceptStageTwoMsP95'
 }
 
-function scrubSchemaKeys(entries: Array<Record<string, unknown>>): string {
+function scrubSchemaKeys(entries: Record<string, unknown>[]): string {
   return JSON.stringify(
     entries.map((entry) =>
       Object.fromEntries(
@@ -59,7 +59,7 @@ function renameStageKeys(bucket: unknown): unknown {
 
 describe('relay observability', () => {
   it('stamps every runtime metrics line with the fix level', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c25', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -73,7 +73,7 @@ describe('relay observability', () => {
   })
 
   it('emits safe readiness dependency outcomes', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -106,7 +106,7 @@ describe('relay observability', () => {
   })
 
   it('flags a readiness answer served from the last known good probe', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -135,7 +135,7 @@ describe('relay observability', () => {
   })
 
   it('separates entering the readiness grace window from leaving it', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -191,7 +191,7 @@ describe('relay observability', () => {
   })
 
   it('keeps rejection reasons separate per lane and resets them each flush', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -216,7 +216,7 @@ describe('relay observability', () => {
   })
 
   it('splits non-drain 503s from scheduled drain-return deferrals', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -242,7 +242,7 @@ describe('relay observability', () => {
   })
 
   it('reports lane slot service times only for windows that served the lane', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -265,7 +265,7 @@ describe('relay observability', () => {
   })
 
   it('sums lock waiters per role and table over the samples taken', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -294,7 +294,7 @@ describe('relay observability', () => {
   })
 
   it('aggregates coarse region requests, selections, fallbacks, and outages', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -342,7 +342,7 @@ describe('relay observability', () => {
   })
 
   it('emits bounded aggregate runtime signals without identities or credentials', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'staging-c1', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -410,7 +410,7 @@ describe('relay observability', () => {
   })
 
   it('aggregates control and splice closes as bounded per-reason deltas', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'staging-c1', region: 'us-central1' },
       (entry) => entries.push(entry)
@@ -441,7 +441,7 @@ describe('relay observability', () => {
   })
 
   it('summarises completed client accepts and control round trips per window', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -505,7 +505,7 @@ describe('relay observability', () => {
   })
 
   it('caps the control round-trip reservoir and reports what it dropped', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -534,7 +534,7 @@ describe('relay observability', () => {
   })
 
   it('samples the whole flooded window rather than its first samples', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'cell', cellId: 'production-gce-c28', region: 'asia-east2' },
       (entry) => entries.push(entry)
@@ -691,7 +691,7 @@ function countSortWork(run: () => void): SortWork {
 }
 
 function summaryThroughFlush(samples: number[]): { p50: number; p95: number; max: number } {
-  const entries: Array<Record<string, unknown>> = []
+  const entries: Record<string, unknown>[] = []
   const observability = new RelayObservability(
     { role: 'cell', cellId: 'staging-c1', region: 'us-central1' },
     (entry) => entries.push(entry)

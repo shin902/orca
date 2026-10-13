@@ -157,7 +157,7 @@ function total(tally: Tally): number {
 }
 
 function percentile(values: number[], fraction: number): number {
-  if (values.length === 0) return 0
+  if (values.length === 0) {return 0}
   const sorted = [...values].sort((left, right) => left - right)
   return Math.round(sorted[Math.min(sorted.length - 1, Math.floor(fraction * sorted.length))]!)
 }
@@ -177,7 +177,7 @@ async function paced<T>(
   const started: Promise<T>[] = []
   for (let index = 0; index < total; index += 1) {
     const dueMs = (index * 1_000) / ratePerSecond - (performance.now() - startedAt)
-    if (dueMs > 0) await new Promise((resolve) => setTimeout(resolve, dueMs))
+    if (dueMs > 0) {await new Promise((resolve) => setTimeout(resolve, dueMs))}
     started.push(operation(index))
   }
   return started
@@ -199,7 +199,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
 
   function servingCell(cellId: string): Instance {
     const instance = servingCells.get(cellId)
-    if (!instance) throw new Error(`no cell pool for ${cellId}`)
+    if (!instance) {throw new Error(`no cell pool for ${cellId}`)}
     return instance
   }
 
@@ -226,9 +226,9 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
           : current.selector.membership.migrationOnly.includes(cellId)
             ? 'migration-only'
             : 'general')
-      if (state === 'existing-only') membership.existingOnly.push(cellId)
-      else if (state === 'migration-only') membership.migrationOnly.push(cellId)
-      else membership.general.push(cellId)
+      if (state === 'existing-only') {membership.existingOnly.push(cellId)}
+      else if (state === 'migration-only') {membership.migrationOnly.push(cellId)}
+      else {membership.general.push(cellId)}
     }
     await admin().store.applyCellAdmissionSelector({
       attemptId: `drain-release-${current.selector.generation}`,
@@ -361,7 +361,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
       hostIdentity(releaseCount + index)
     )
     await seed([...releasing, ...dialling])
-    if (neighboursCapped) await heartbeatAll(TARGETS)
+    if (neighboursCapped) {await heartbeatAll(TARGETS)}
 
     const releaseLatencies: number[] = []
     const releaseFailed: Tally = {}
@@ -380,7 +380,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
     const activations = { ok: 0, failed: activationFailed }
     const activationWork: Promise<void>[] = []
     const stickyLanes = directors.map(() => new RelayPublicAssignmentAdmission(STICKY_LANE))
-    for (const instance of directors) consumeRelayCellInventoryHold(instance.database)
+    for (const instance of directors) {consumeRelayCellInventoryHold(instance.database)}
     consumeRelayDatabasePoolPressure(servingCell(SOURCE.id).database)
     delay.delayMs = roundTripMs
     delay.enabled = true
@@ -395,8 +395,8 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
           releasing[index]!,
           RELEASED_ACTIVITY
         )
-        if (released) releases.ok += 1
-        else count(releases.failed, 'lease_missing')
+        if (released) {releases.ok += 1}
+        else {count(releases.failed, 'lease_missing')}
       } catch (error) {
         count(releases.failed, failureCode(error))
       }
@@ -431,8 +431,8 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
           return
         }
         dials.placed += 1
-        if (grant.region !== SOURCE.region) dials.placedCrossRegion += 1
-        if (performance.now() - startedAt <= WINDOW_MS) dials.placedInWindow += 1
+        if (grant.region !== SOURCE.region) {dials.placedCrossRegion += 1}
+        if (performance.now() - startedAt <= WINDOW_MS) {dials.placedInWindow += 1}
         activationWork.push(
           servingCell(grant.cellId)
             .store.activateControl(identity, {
@@ -457,7 +457,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
     await Promise.allSettled(activationWork)
     const waits = await sampler.stop()
     delay.enabled = false
-    if (neighboursCapped) await heartbeatAll()
+    if (neighboursCapped) {await heartbeatAll()}
 
     const holds = directors.map((instance) => consumeRelayCellInventoryHold(instance.database))
     const report: RunReport = {
@@ -500,7 +500,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
       hostIdentity(index)
     )
     await seed(hosts)
-    if (neighboursCapped) await heartbeatAll(TARGETS)
+    if (neighboursCapped) {await heartbeatAll(TARGETS)}
     const stickyLanes = directors.map(() => new RelayPublicAssignmentAdmission(STICKY_LANE))
     const firstRejected: Tally = {}
     const firstFailed: Tally = {}
@@ -525,11 +525,11 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
       const lease = await stickyLanes[director]!.acquire(identity.relayHostId, (reason) => {
         rejection = reason
       })
-      if (!lease) return `rejected:${rejection}`
+      if (!lease) {return `rejected:${rejection}`}
       try {
-        if (!(await directors[director]!.store.resolve(identity))) return 'failed:unverified'
+        if (!(await directors[director]!.store.resolve(identity))) {return 'failed:unverified'}
         const grant = await directors[director]!.store.assign(identity, 'asia-east2', 'asia-east2')
-        if (grant.cellId === SOURCE.id) return 'failed:kept_on_source'
+        if (grant.cellId === SOURCE.id) {return 'failed:kept_on_source'}
         activationWork.push(
           servingCell(grant.cellId)
             .store.activateControl(identity, {
@@ -541,7 +541,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
         )
         return 'placed'
       } catch (error) {
-        if (error instanceof RelayAssignmentRowBusyError) return `rejected:${error.message}`
+        if (error instanceof RelayAssignmentRowBusyError) {return `rejected:${error.message}`}
         return `failed:${failureCode(error)}`
       } finally {
         lease.release()
@@ -555,8 +555,8 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
         .store.releaseActivity(identity, RELEASED_ACTIVITY)
         .then(
           (released) => {
-            if (released) releases.ok += 1
-            else count(releases.failed, 'lease_missing')
+            if (released) {releases.ok += 1}
+            else {count(releases.failed, 'lease_missing')}
           },
           (error: unknown) => count(releases.failed, failureCode(error))
         )
@@ -565,26 +565,26 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
       for (let attempt = 0; ; attempt += 1) {
         const sentAt = performance.now()
         const outcome = await dial(identity, director)
-        if (outcome === `rejected:${new RelayAssignmentRowBusyError().message}`) busyRefusals += 1
-        if (outcome.startsWith('failed:')) count(unexpected, outcome.slice(7))
+        if (outcome === `rejected:${new RelayAssignmentRowBusyError().message}`) {busyRefusals += 1}
+        if (outcome.startsWith('failed:')) {count(unexpected, outcome.slice(7))}
         if (attempt === 0) {
-          if (outcome === 'placed') firstAttempt.placed += 1
-          else if (outcome.startsWith('rejected:')) count(firstRejected, outcome.slice(9))
-          else count(firstFailed, outcome.slice(7))
+          if (outcome === 'placed') {firstAttempt.placed += 1}
+          else if (outcome.startsWith('rejected:')) {count(firstRejected, outcome.slice(9))}
+          else {count(firstFailed, outcome.slice(7))}
         }
         if (outcome === 'placed') {
           const placedAt = performance.now()
           timeToPlaced.push(placedAt - releasedAt)
-          if (placedAt - startedAt <= WINDOW_MS + dialDelayMs) placedInWindow += 1
+          if (placedAt - startedAt <= WINDOW_MS + dialDelayMs) {placedInWindow += 1}
           break
         }
-        if (!outcome.startsWith('rejected:')) break
-        if (attempt === 1) hostsRefusedTwice += 1
+        if (!outcome.startsWith('rejected:')) {break}
+        if (attempt === 1) {hostsRefusedTwice += 1}
         const nextAt =
           sentAt +
           HOST_ASSIGN_MIN_INTERVAL_MS +
           Math.random() * HOST_ASSIGN_INTERVAL_JITTER_MS
-        if (nextAt - releasedAt > REDIAL_GIVE_UP_MS) break
+        if (nextAt - releasedAt > REDIAL_GIVE_UP_MS) {break}
         redials += 1
         await new Promise((resolve) => setTimeout(resolve, nextAt - performance.now()))
       }
@@ -594,7 +594,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
     await Promise.allSettled(activationWork)
     const waits = await sampler.stop()
     delay.enabled = false
-    if (neighboursCapped) await heartbeatAll()
+    if (neighboursCapped) {await heartbeatAll()}
     const report: DepartingReport = {
       dialDelayMs,
       neighboursCapped,
@@ -653,8 +653,8 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
 
   afterAll(async () => {
     delay.enabled = false
-    if (reports.length > 0) console.table(reports.map(flattenReport))
-    if (departingReports.length > 0) console.table(departingReports.map(flattenDeparting))
+    if (reports.length > 0) {console.table(reports.map(flattenReport))}
+    if (departingReports.length > 0) {console.table(departingReports.map(flattenDeparting))}
     if (directors.length > 0) {
       await deleteHostRows()
       // Cells before the selector rebuild, or its membership names missing rows.
@@ -673,7 +673,7 @@ describePostgres('PostgreSQL drain releases against director placement', () => {
       }
       await resetSelectorBoundary()
     }
-    for (const instance of [...directors, ...servingCells.values()]) await instance.database.close()
+    for (const instance of [...directors, ...servingCells.values()]) {await instance.database.close()}
     await observer?.close()
   })
 

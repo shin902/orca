@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useLayoutEffect,
   useRef,
   type Dispatch,
   type KeyboardEventHandler,
@@ -57,9 +58,10 @@ export function useNativeChatComposerKeyDown({
   setDraft,
   setCaret
 }: UseNativeChatComposerKeyDownArgs): KeyboardEventHandler<HTMLElement> {
-  // Read through a ref: the transcript changes on every streamed frame.
   const recallRef = useRef(recall)
-  recallRef.current = recall
+  useLayoutEffect(() => {
+    recallRef.current = recall
+  }, [recall])
   return useCallback(
     (event) => {
       if (isComposing() || event.nativeEvent.isComposing || event.keyCode === 229) {
@@ -139,30 +141,30 @@ export function useNativeChatComposerKeyDown({
       const arrow = event.key === 'ArrowUp' || event.key === 'ArrowDown'
       // A modified arrow selects or jumps; attachments make the composer non-empty.
       const plain = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey
-      const recall = recallRef.current
-      if (!arrow || !plain || hasAttachments || !recall) {
+      const currentRecall = recallRef.current
+      if (!arrow || !plain || hasAttachments || !currentRecall) {
         return
       }
-      const recalling = isNativeChatRecallActive(recall.position, draft)
+      const recalling = isNativeChatRecallActive(currentRecall.position, draft)
       // Checked before the layout read and the prompt scan: a typed draft never recalls.
       if (!recalling && (event.key === 'ArrowDown' || draft !== '')) {
         return
       }
-      if (!recall.isCaretOnVisualEdge(event.key === 'ArrowUp' ? 'start' : 'end')) {
+      if (!currentRecall.isCaretOnVisualEdge(event.key === 'ArrowUp' ? 'start' : 'end')) {
         return
       }
       const step = stepNativeChatPromptRecall({
         direction: event.key === 'ArrowUp' ? 'back' : 'forward',
-        prompts: nativeChatSentPrompts(recall.source),
-        position: recall.position,
+        prompts: nativeChatSentPrompts(currentRecall.source),
+        position: currentRecall.position,
         draft
       })
       if (step) {
         event.preventDefault()
-        recall.setPosition(step.position)
+        currentRecall.setPosition(step.position)
         setDraft(step.draft)
         setCaret(step.draft.length)
-        recall.show(step.draft)
+        currentRecall.show(step.draft)
       }
     },
     [

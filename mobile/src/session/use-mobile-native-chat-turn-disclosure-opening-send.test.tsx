@@ -3,7 +3,7 @@
 // The phone keeps no outbox: its rows are the host's recorded ones, plus its own echo of a send the
 // host accepted, until that send's row arrives. The list is built as the phone's view builds it.
 
-import { createElement } from 'react'
+import { createElement, useEffect } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it } from 'vitest'
 import { agentSessionFailureFact } from '../../../src/shared/agent-session-failure'
@@ -110,7 +110,7 @@ function Harness(props: {
     stopping: props.stopping,
     scopeKey: 'host\0worktree\0tab-a'
   })
-  props.seen(disclosure)
+  useEffect(() => props.seen(disclosure), [disclosure, props.seen])
   return null
 }
 

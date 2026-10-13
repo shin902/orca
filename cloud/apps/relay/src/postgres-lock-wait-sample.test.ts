@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RelayDatabase } from './database.js'
 import { readPostgresLockWaitSample } from './postgres-lock-wait-sample.js'
 
-function sampled(rows: Array<Record<string, unknown>>): RelayDatabase {
+function sampled(rows: Record<string, unknown>[]): RelayDatabase {
   const database: RelayDatabase = {
     query: async () => rows,
     queryLocked: async () => rows,

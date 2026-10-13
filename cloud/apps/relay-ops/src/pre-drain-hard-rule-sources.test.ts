@@ -43,7 +43,7 @@ function fakeGoogle(fake: Fake) {
       return new Response('{}', { status: fake.descriptorStatus ?? 200 })
     }
     if (url.hostname === 'logging.googleapis.com') {
-      if (fake.loggingStatus) return new Response('{}', { status: fake.loggingStatus })
+      if (fake.loggingStatus) {return new Response('{}', { status: fake.loggingStatus })}
       const filter = String(JSON.parse(body ?? '{}').filter ?? '')
       const instanceId = /instance_id="([0-9]+)"/.exec(filter)?.[1] ?? ''
       const cellId = fake.cells?.[instanceId]
@@ -178,7 +178,7 @@ describe('pre-drain hard rule reader', () => {
     expect(reads).toHaveLength(3)
     const byMetric = (needle: string): URL => {
       const url = reads.find((entry) => entry.searchParams.get('filter')?.includes(needle))
-      if (!url) throw new Error(`no read for ${needle}`)
+      if (!url) {throw new Error(`no read for ${needle}`)}
       return url
     }
     const exits = byMetric(CELL_PROCESS_EXIT_METRIC)

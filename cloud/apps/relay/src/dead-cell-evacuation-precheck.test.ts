@@ -88,7 +88,7 @@ describe.each(dialects)('dead-cell evacuation pre-check (%s)', (_dialect, open) 
   })
 
   afterAll(async () => {
-    if (databaseUrl) await onAdmin(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)
+    if (databaseUrl) {await onAdmin(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)}
   })
 
   async function setup(now: () => number) {
@@ -116,7 +116,7 @@ describe.each(dialects)('dead-cell evacuation pre-check (%s)', (_dialect, open) 
   it('skips the host query when the only dead cell is unfenced and existing-only', async () => {
     let now = 100
     const { store, recording } = await setup(() => now)
-    for (const cell of CELLS) await heartbeat(store, cell)
+    for (const cell of CELLS) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     await store.setCellEnabled('cell-b', false)
     expect(await store.assign(identity)).toMatchObject({ cellId: 'cell-a' })
@@ -138,7 +138,7 @@ describe.each(dialects)('dead-cell evacuation pre-check (%s)', (_dialect, open) 
   it('still evacuates hosts from a dead uncapped cell that admits', async () => {
     let now = 100
     const { store, recording } = await setup(() => now)
-    for (const cell of CELLS) await heartbeat(store, cell)
+    for (const cell of CELLS) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     await store.setCellEnabled('cell-b', false)
     expect(await store.assign(identity)).toMatchObject({ cellId: 'cell-a' })

@@ -15,7 +15,7 @@ describePostgres('PostgreSQL priority lane under a reconnect herd', () => {
 
   afterAll(async () => {
     delay.enabled = false
-    for (const database of databases) await database.close()
+    for (const database of databases) {await database.close()}
   })
 
   it('renews ahead of the herd while queued general work times out', async () => {

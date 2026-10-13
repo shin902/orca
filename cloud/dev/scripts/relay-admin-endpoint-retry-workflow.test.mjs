@@ -57,7 +57,7 @@ test('every retried admin request captures only the final attempt body', () => {
     /CURRENT_DIRECTOR_STATUS="\$\(admin_post current-cell-status/,
     /TARGET_RUNTIME="\$\(admin_post target-runtime/,
     /TARGET_DIRECTOR_STATUS="\$\(admin_post target-cell-status/
-  ]) assert.match(job, call)
+  ]) {assert.match(job, call)}
   // The verify loop captures only the status code; its body goes to the file.
   assert.doesNotMatch(job.replace(verifyAdminPost(), ''), /\$\(curl /)
 })
@@ -79,7 +79,7 @@ async function runVerifyAdminPost(respond) {
   const server = createServer((request, response) => {
     calls += 1
     const { status, body, drop } = respond(Date.now() - startedAt)
-    if (drop) return void request.socket.destroy()
+    if (drop) {return void request.socket.destroy()}
     response.writeHead(status, { 'content-type': 'application/json' })
     response.end(body)
   })

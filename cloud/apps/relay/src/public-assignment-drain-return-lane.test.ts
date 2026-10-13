@@ -189,7 +189,7 @@ describe('drain-return lane', () => {
     const holding = deferred<RelayAssignment>()
     let busy = true
     const assign = vi.fn(async ({ relayHostId }: { relayHostId: string }) => {
-      if (relayHostId === holder) return await holding.promise
+      if (relayHostId === holder) {return await holding.promise}
       if (relayHostId === host && busy) {
         busy = false
         throw new RelayAssignmentRowBusyError()
@@ -282,7 +282,7 @@ describe('drain-return lane', () => {
         }
         return await storeMutex(async () => {
           await inventoryLock(async () => await sleep(INVENTORY_LOCK_MS))
-          if (relayHostId.startsWith('d')) moved.add(relayHostId)
+          if (relayHostId.startsWith('d')) {moved.add(relayHostId)}
           return assignment('cell-new', relayHostId)
         })
       })

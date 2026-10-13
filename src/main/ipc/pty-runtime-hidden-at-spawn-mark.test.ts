@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeDeferred } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
@@ -69,6 +69,15 @@ describe('runtime-controller spawn: hidden until a renderer view mounts', () => 
     getPtySetRendererPtyVisibleListener,
     getPtyDataSendCalls
   } = setupPtyIpcSuite()
+
+  beforeEach(() => {
+    // The provider is mocked; do not invoke host shell discovery when SHELL is unset.
+    if (process.platform !== 'win32') {
+      vi.stubEnv('SHELL', '/bin/bash')
+    }
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
 
   function simulateRendererReload(): void {
     const reloadHandlers = mainWindow.webContents.on.mock.calls

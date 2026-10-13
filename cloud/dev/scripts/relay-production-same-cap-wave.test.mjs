@@ -756,8 +756,9 @@ test('a canary authorizes batches at its own pace or slower, never faster', () =
     rollbackDigest,
     drainPaceWindowMs: pace,
     shadowReport: report,
-    confirmation: `ROLL_RELAY_SAME_CAP ${targetDigest} production-gce-c7` +
-      (pace === '300000' ? '' : ` drain-pace-window-ms=${pace}`),
+    confirmation: `ROLL_RELAY_SAME_CAP ${targetDigest} production-gce-c7${
+      pace === '300000' ? '' : ` drain-pace-window-ms=${pace}`
+    }`,
     commitSha: 'c'.repeat(40),
     runId: '42',
     selectorGeneration: '11',
@@ -776,7 +777,7 @@ test('a canary authorizes batches at its own pace or slower, never faster', () =
     rehomeGeneration: '4'
   })
   // Stepping back to the default after a bad rung needs no new canary.
-  for (const pace of ['60000', '300000']) assert.equal(verify(seal('60000'), pace).cellId, 'production-gce-c7')
+  for (const pace of ['60000', '300000']) {assert.equal(verify(seal('60000'), pace).cellId, 'production-gce-c7')}
   assert.throws(() => verify(seal('60000'), '30000'), /drained over 60000 ms/)
   assert.throws(() => verify(seal('300000'), '60000'), /drained over 300000 ms/)
   // Slower than the default needs no PASS, and a slow canary authorizes only slower-or-equal.
@@ -916,7 +917,7 @@ test('the workflows offer exactly the closed set and scale the drain wait with i
     'bash', ['-c', `DRAIN_PACE_WINDOW_MS=${pace}; echo $((${timeout}))`], { encoding: 'utf8' }
   ))
   // Exactly the timeouts every pace had before the slower ones existed.
-  for (const pace of [300_000, 60_000, 30_000]) assert.equal(timeoutMs(pace), 900_000 + pace)
+  for (const pace of [300_000, 60_000, 30_000]) {assert.equal(timeoutMs(pace), 900_000 + pace)}
   for (const pace of SAME_CAP_DRAIN_PACE_WINDOWS_MS) {
     assert.ok(timeoutMs(pace) >= 2 * pace + 600_000, String(pace))
   }

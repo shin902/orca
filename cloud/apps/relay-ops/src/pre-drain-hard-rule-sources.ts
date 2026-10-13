@@ -66,7 +66,7 @@ async function readPerMinute(
   url.searchParams.set('aggregation.crossSeriesReducer', read.reducer)
   url.searchParams.set('pageSize', '1000')
   const parsed = MonitoringResponseSchema.parse(await googleJson(fetchImpl, token, url))
-  if (parsed.nextPageToken) throw new Error('Google metric pagination is incomplete')
+  if (parsed.nextPageToken) {throw new Error('Google metric pagination is incomplete')}
   return parsed.timeSeries.flatMap((series) => series.points.map(pointValue))
 }
 
@@ -102,7 +102,7 @@ async function readExitsByInstance(
   url.searchParams.set('aggregation.groupByFields', 'resource.label."instance_id"')
   url.searchParams.set('pageSize', '1000')
   const parsed = ExitsByInstanceSchema.parse(await googleJson(fetchImpl, token, url))
-  if (parsed.nextPageToken) throw new Error('Google metric pagination is incomplete')
+  if (parsed.nextPageToken) {throw new Error('Google metric pagination is incomplete')}
   const exits = new Map<string, number>()
   for (const series of parsed.timeSeries) {
     const instanceId = series.resource.labels.instance_id
@@ -195,10 +195,10 @@ export function createPreDrainHardRuleReader(
     ])
     const resolved = new Map<string, string | null>()
     for (const [instanceId, exits] of exitsByInstance) {
-      if (exits <= 0) continue
+      if (exits <= 0) {continue}
       const known = cellByInstance.get(instanceId)
       const cellId = known ?? await readInstanceCell(environment, token, fetchImpl, nowMs, instanceId)
-      if (cellId !== null) cellByInstance.set(instanceId, cellId)
+      if (cellId !== null) {cellByInstance.set(instanceId, cellId)}
       resolved.set(instanceId, cellId)
     }
     const attribution = attributeCellExits({

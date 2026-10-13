@@ -60,11 +60,11 @@ type HoldMeasuringTransaction = { consumeHold(): MeasuredHold | undefined }
 
 function recordMeasuredHold(holds: CellInventoryHoldSamples, transaction: unknown): void {
   const hold = (transaction as HoldMeasuringTransaction).consumeHold?.()
-  if (hold) holds.record(hold.holdMs, hold.site)
+  if (hold) {holds.record(hold.holdMs, hold.site)}
 }
 
 function lockedStatement(sql: string, options: RelayLockOptions): string {
-  if (options.lockClauseInStatement) return sql
+  if (options.lockClauseInStatement) {return sql}
   return `${sql} FOR UPDATE${options.failIfUnavailable ? ' NOWAIT' : ''}`
 }
 export type RelayTransactionOptions = { reportRetries?: boolean }
@@ -97,7 +97,7 @@ export async function commitWithFinalWrite(
   sql: string,
   params: unknown[] = []
 ): Promise<boolean> {
-  if (database.commitWithFinal) return await database.commitWithFinal(sql, params)
+  if (database.commitWithFinal) {return await database.commitWithFinal(sql, params)}
   return (await database.query(sql, params)).length > 0
 }
 
@@ -788,7 +788,7 @@ class SqliteTransaction implements RelayDatabase {
   constructor(protected readonly database: DatabaseSync) {}
 
   consumeHold(): MeasuredHold | undefined {
-    if (this.held === undefined) return undefined
+    if (this.held === undefined) {return undefined}
     const hold = { holdMs: performance.now() - this.held.fromMs, site: this.held.site }
     this.held = undefined
     return hold
@@ -803,7 +803,7 @@ class SqliteTransaction implements RelayDatabase {
   async query(sql: string, params: unknown[] = []): Promise<SqlRow[]> {
     const statement = this.database.prepare(sql)
     const bound = params.map((value) => (value === undefined ? null : value)) as never[]
-    if (returnsRows(sql)) return statement.all(...bound) as SqlRow[]
+    if (returnsRows(sql)) {return statement.all(...bound) as SqlRow[]}
     const result = statement.run(...bound)
     return [{ changes: Number(result.changes) }]
   }
@@ -875,11 +875,11 @@ function inlinePostgresParameters(sql: string, params: unknown[], client: pg.Poo
   let index = 0
   const inlined = sql.replace(/\?/g, () => {
     const value = params[index++]
-    if (typeof value === 'number' && Number.isSafeInteger(value)) return String(value)
-    if (typeof value === 'string') return client.escapeLiteral(value)
+    if (typeof value === 'number' && Number.isSafeInteger(value)) {return String(value)}
+    if (typeof value === 'string') {return client.escapeLiteral(value)}
     throw new Error('unsupported_inline_parameter')
   })
-  if (index !== params.length) throw new Error('inline_parameter_count_mismatch')
+  if (index !== params.length) {throw new Error('inline_parameter_count_mismatch')}
   return inlined
 }
 
@@ -922,11 +922,11 @@ class PostgresTransaction implements RelayDatabase {
 
   private assertNotCommitted(): void {
     // A later statement would run in autocommit, outside the work it belongs to.
-    if (this.state === 'committed') throw new Error('postgres_transaction_already_committed')
+    if (this.state === 'committed') {throw new Error('postgres_transaction_already_committed')}
   }
 
   consumeHold(): MeasuredHold | undefined {
-    if (this.held === undefined) return undefined
+    if (this.held === undefined) {return undefined}
     const hold = { holdMs: performance.now() - this.held.fromMs, site: this.held.site }
     this.held = undefined
     return hold
@@ -968,7 +968,7 @@ class PostgresTransaction implements RelayDatabase {
     try {
       // A blocked waiter holds its pooled client for the whole lock_timeout, so
       // hot tiny-table locks bound their own wait well under the pool default.
-      if (bounded) await this.query(setLocalLockTimeout(options.lockTimeoutMs!))
+      if (bounded) {await this.query(setLocalLockTimeout(options.lockTimeoutMs!))}
       const rows = await this.query(lockedStatement(sql, options), params)
       if (options.measureHoldMs && this.held === undefined) {
         this.held = { fromMs: performance.now(), site: options.holdSite ?? 'inventory' }
@@ -979,7 +979,7 @@ class PostgresTransaction implements RelayDatabase {
         options.failIfUnavailable &&
         String((error as { code?: unknown }).code) === '55P03'
       ) {
-        if (options.measureHoldMs) this.lockUnavailable += 1
+        if (options.measureHoldMs) {this.lockUnavailable += 1}
         throw new Error('database_lock_unavailable')
       }
       // A bounded wait that expires raises the same 55P03 without NOWAIT. This is
@@ -991,7 +991,7 @@ class PostgresTransaction implements RelayDatabase {
     } finally {
       // Restore on the error path too: the transaction may still be retried or
       // continue with unrelated locks after a caught lock failure.
-      if (bounded) await this.query(setLocalLockTimeout(POSTGRES_LOCK_TIMEOUT_MS)).catch(() => undefined)
+      if (bounded) {await this.query(setLocalLockTimeout(POSTGRES_LOCK_TIMEOUT_MS)).catch(() => undefined)}
     }
   }
 
@@ -1020,7 +1020,7 @@ export function relayPostgresStatementTimeoutMs(
   env: NodeJS.ProcessEnv = process.env
 ): number {
   const configured = env.ORCA_RELAY_POSTGRES_STATEMENT_TIMEOUT_MS
-  if (configured === undefined || configured === '') return POSTGRES_STATEMENT_TIMEOUT_MS
+  if (configured === undefined || configured === '') {return POSTGRES_STATEMENT_TIMEOUT_MS}
   const milliseconds = Number(configured)
   // 0 is PostgreSQL's "no timeout"; refusing it keeps the deadline this exists
   // to enforce from being disabled by a typo in an environment variable.
@@ -1120,7 +1120,7 @@ export class PostgresDatabase implements RelayDatabase {
         options.failIfUnavailable &&
         String((error as { code?: unknown }).code) === '55P03'
       ) {
-        if (options.measureHoldMs) this.holds.recordUnavailable()
+        if (options.measureHoldMs) {this.holds.recordUnavailable()}
         throw new Error('database_lock_unavailable')
       }
       throw error
@@ -1137,14 +1137,14 @@ export class PostgresDatabase implements RelayDatabase {
       try {
         await client.query('BEGIN')
         const result = await operation(transaction)
-        if (transaction.open) await client.query('COMMIT')
+        if (transaction.open) {await client.query('COMMIT')}
         recordMeasuredHold(this.holds, transaction)
         this.holds.recordUnavailable(transaction.consumeLockUnavailable())
         this.holds.recordLockTimeout(transaction.consumeLockTimeouts())
         return result
       } catch (error) {
         const open = transaction.open
-        if (open) await client.query('ROLLBACK').catch(() => undefined)
+        if (open) {await client.query('ROLLBACK').catch(() => undefined)}
         this.holds.recordUnavailable(transaction.consumeLockUnavailable())
         this.holds.recordLockTimeout(transaction.consumeLockTimeouts())
         // Once the fused commit has ended the transaction, a retry would apply the work twice.
@@ -1240,7 +1240,7 @@ export function absorbPostgresIdleClientErrors(pool: Pick<pg.Pool, 'on'>): void 
 
 async function applySchema(database: RelayDatabase): Promise<void> {
   for (const statement of SCHEMA.split(';')) {
-    if (statement.trim()) await database.query(statement)
+    if (statement.trim()) {await database.query(statement)}
   }
   for (const [table, column] of [
     ['relay_control_capabilities', 'idle_regional_rehome'],
@@ -1336,8 +1336,8 @@ export async function openRelayDatabase(input: RelayDatabaseOpenInput): Promise<
     database = new SqliteDatabase(sqlite)
   }
   try {
-    if (!input.databaseUrl) await applySchema(database)
-    if (!input.databaseUrl || appliesPostgresSchema) await backfillRelayCellRegions(database)
+    if (!input.databaseUrl) {await applySchema(database)}
+    if (!input.databaseUrl || appliesPostgresSchema) {await backfillRelayCellRegions(database)}
     return database
   } catch (error) {
     await database.close().catch(() => undefined)

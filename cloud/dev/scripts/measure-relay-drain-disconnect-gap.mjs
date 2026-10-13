@@ -12,14 +12,14 @@ const GRANT = /^\[orca-relay\] assignment granted lane=\S+ hinted=true host=(\S+
 const DRAIN_CLOSE_REASON = 'resolve configured director'
 
 function entryText(entry) {
-  if (typeof entry.textPayload === 'string') return entry.textPayload
-  if (typeof entry.jsonPayload?.message === 'string') return entry.jsonPayload.message
+  if (typeof entry.textPayload === 'string') {return entry.textPayload}
+  if (typeof entry.jsonPayload?.message === 'string') {return entry.jsonPayload.message}
   return null
 }
 
 function entryTime(entry) {
   const at = Date.parse(entry.timestamp)
-  if (!Number.isFinite(at)) throw new Error('log entry has no timestamp')
+  if (!Number.isFinite(at)) {throw new Error('log entry has no timestamp')}
   return at
 }
 
@@ -27,7 +27,7 @@ export function readDrainCloses(entries) {
   const closes = []
   for (const entry of entries) {
     const match = CLOSE.exec(entryText(entry) ?? '')
-    if (!match) continue
+    if (!match) {continue}
     closes.push({
       host: match[1],
       splices: Number(match[2]),
@@ -44,13 +44,13 @@ export function readReconnectGrants(entries) {
   const grants = []
   for (const entry of entries) {
     const match = GRANT.exec(entryText(entry) ?? '')
-    if (match) grants.push({ host: match[1], cellId: match[2], at: entryTime(entry) })
+    if (match) {grants.push({ host: match[1], cellId: match[2], at: entryTime(entry) })}
   }
   return grants.sort((left, right) => left.at - right.at)
 }
 
 function percentile(sorted, fraction) {
-  if (sorted.length === 0) return null
+  if (sorted.length === 0) {return null}
   return sorted[Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1)]
 }
 
@@ -77,7 +77,7 @@ export function measureDrainDisconnectGap({
   grants,
   cellRegions = {}
 }) {
-  if (!Number.isFinite(drainStartedAt)) throw new Error('drain start time is invalid')
+  if (!Number.isFinite(drainStartedAt)) {throw new Error('drain start time is invalid')}
   if (!Number.isFinite(drainEndedAt) || drainEndedAt <= drainStartedAt) {
     throw new Error('drain end time is invalid')
   }
@@ -85,12 +85,12 @@ export function measureDrainDisconnectGap({
   // First close per host after the drain began; later closes are the host's new sessions.
   const firstClose = new Map()
   for (const close of closes) {
-    if (close.at < drainStartedAt || close.at > drainEndedAt || firstClose.has(close.host)) continue
+    if (close.at < drainStartedAt || close.at > drainEndedAt || firstClose.has(close.host)) {continue}
     firstClose.set(close.host, close)
   }
   const grantsByHost = new Map()
   for (const grant of grants) {
-    if (grant.at < drainStartedAt || grant.cellId === sourceCellId) continue
+    if (grant.at < drainStartedAt || grant.cellId === sourceCellId) {continue}
     grantsByHost.set(grant.host, [...(grantsByHost.get(grant.host) ?? []), grant])
   }
   const cutOffGapsMs = []
@@ -101,13 +101,13 @@ export function measureDrainDisconnectGap({
     phoneSessionsDropped += close.splices
     const hostGrants = grantsByHost.get(close.host) ?? []
     const first = hostGrants[0]
-    if (first && first.at <= close.at) counts.movedFirst += 1
+    if (first && first.at <= close.at) {counts.movedFirst += 1}
     else if (close.reason === DRAIN_CLOSE_REASON) {
       if (first) {
         counts.cutOff += 1
         cutOffGapsMs.push(first.at - close.at)
-      } else counts.cutOffUnresolved += 1
-    } else counts.otherClose += 1
+      } else {counts.cutOffUnresolved += 1}
+    } else {counts.otherClose += 1}
     if (first && sourceRegion && cellRegions[first.cellId] && cellRegions[first.cellId] !== sourceRegion) {
       const back = hostGrants.find(
         (grant) => grant.at > first.at && cellRegions[grant.cellId] === sourceRegion
@@ -139,7 +139,7 @@ function argument(name) {
 
 function required(name) {
   const value = argument(name)
-  if (value === undefined) throw new Error(`--${name} is required`)
+  if (value === undefined) {throw new Error(`--${name} is required`)}
   return value
 }
 
@@ -158,4 +158,4 @@ function main() {
   console.log(JSON.stringify(result, null, 2))
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main()
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {main()}

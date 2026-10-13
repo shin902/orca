@@ -78,7 +78,7 @@ describe.each(dialects)('released reservation prune (%s)', (_dialect, open) => {
   })
 
   afterAll(async () => {
-    if (databaseUrl) await onAdmin(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)
+    if (databaseUrl) {await onAdmin(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)}
   })
 
   it('deletes only released rows older than the retention window', async () => {
@@ -154,7 +154,7 @@ describePostgres('heap window reaper against PostgreSQL', () => {
     expect(first).toBeLessThan(600)
 
     let ticks = 1
-    while ((await reaper.reap(database, [NOW])) > 0) ticks += 1
+    while ((await reaper.reap(database, [NOW])) > 0) {ticks += 1}
     expect(ticks).toBeGreaterThan(5)
     const left = await database.query(
       `SELECT state, COUNT(*) AS rows FROM relay_control_connection_reservations GROUP BY state`

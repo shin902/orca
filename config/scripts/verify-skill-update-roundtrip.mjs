@@ -146,6 +146,7 @@ function execSkills(args) {
         ...process.env,
         HOME: home,
         USERPROFILE: home,
+        HERMES_HOME: path.join(home, '.hermes'),
         CODEX_HOME: path.join(home, '.codex'),
         CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
         XDG_STATE_HOME: stateHome,

@@ -1,6 +1,5 @@
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
@@ -16,7 +15,7 @@ const NEVER_REJECTS = new Map([
   ['regional-rehome-worker.ts#run', 'one try/catch around the whole poll']
 ])
 
-const sourceDirectory = fileURLToPath(new URL('.', import.meta.url))
+const sourceDirectory = import.meta.dirname
 const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.NodeNext,
@@ -49,10 +48,10 @@ function consumer(call: ts.CallExpression): { node: ts.Node; caught: boolean } {
   while (isChainStep(node.parent) && ts.isCallExpression(node.parent.parent)) {
     const step = node.parent.parent
     const method = node.parent.name.text
-    if (method === 'catch' || (method === 'then' && step.arguments.length > 1)) caught = true
+    if (method === 'catch' || (method === 'then' && step.arguments.length > 1)) {caught = true}
     node = step
   }
-  while (ts.isParenthesizedExpression(node.parent)) node = node.parent
+  while (ts.isParenthesizedExpression(node.parent)) {node = node.parent}
   return { node, caught }
 }
 
@@ -68,11 +67,11 @@ function discardedByCallback(checker: ts.TypeChecker, fn: ts.ArrowFunction): boo
 }
 
 function neverRead(checker: ts.TypeChecker, declaration: ts.VariableDeclaration): boolean {
-  if (!ts.isIdentifier(declaration.name)) return false
+  if (!ts.isIdentifier(declaration.name)) {return false}
   const symbol = checker.getSymbolAtLocation(declaration.name)
   let read = false
   const visit = (node: ts.Node): void => {
-    if (read) return
+    if (read) {return}
     if (ts.isIdentifier(node) && node !== declaration.name) {
       read = checker.getSymbolAtLocation(node) === symbol
     }
@@ -84,10 +83,10 @@ function neverRead(checker: ts.TypeChecker, declaration: ts.VariableDeclaration)
 
 function floatingShape(checker: ts.TypeChecker, call: ts.CallExpression): string | null {
   const { node, caught } = consumer(call)
-  if (caught) return null
+  if (caught) {return null}
   const parent = node.parent
-  if (ts.isExpressionStatement(parent)) return 'statement'
-  if (ts.isVoidExpression(parent)) return 'void'
+  if (ts.isExpressionStatement(parent)) {return 'statement'}
+  if (ts.isVoidExpression(parent)) {return 'void'}
   if (ts.isArrowFunction(parent) && parent.body === node && discardedByCallback(checker, parent)) {
     return 'callback'
   }
@@ -99,7 +98,7 @@ function floatingShape(checker: ts.TypeChecker, call: ts.CallExpression): string
 
 function exempt(checker: ts.TypeChecker, call: ts.CallExpression): boolean {
   const declaration = checker.getResolvedSignature(call)?.getDeclaration()
-  if (!declaration) return false
+  if (!declaration) {return false}
   const name = ts.getNameOfDeclaration(declaration)?.getText()
   return NEVER_REJECTS.has(`${basename(declaration.getSourceFile().fileName)}#${name}`)
 }
@@ -110,7 +109,7 @@ function census(program: ts.Program, files: string[]): { floating: string[]; see
   let seen = 0
   for (const file of files) {
     const source = program.getSourceFile(file)
-    if (!source) throw new Error(`not in program: ${file}`)
+    if (!source) {throw new Error(`not in program: ${file}`)}
     const visit = (node: ts.Node): void => {
       // A chain step is judged through the call at its base.
       if (ts.isCallExpression(node) && !isChainStep(node.expression) && isPromise(checker, node)) {

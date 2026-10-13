@@ -149,6 +149,8 @@ __orca_osc133_prompt_done() {
   trap '__orca_osc133_preexec' DEBUG
 }
 __orca_osc133_preexec() {
+  [[ -n "${__orca_chaining_debug_trap:-}" ]] && return 0
+
   if [[ -n "${__orca_prompt_status_capture_command:-}" && "$BASH_COMMAND" == "$__orca_prompt_status_capture_command" ]]; then
     unset __orca_initial_prompt
     __orca_in_legacy_prompt_wrapper=1
@@ -248,6 +250,7 @@ __orca_update_user_debug_trap() {
 }
 __orca_run_user_debug_trap() {
   if [[ -n "${__orca_user_debug_trap:-}" ]]; then
+    local __orca_chaining_debug_trap=1
     eval "$__orca_user_debug_trap" || true
   fi
 }

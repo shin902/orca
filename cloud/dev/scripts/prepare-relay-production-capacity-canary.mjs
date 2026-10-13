@@ -46,7 +46,7 @@ export function parseProductionCapacityCellArguments(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index]
     const value = argv[index + 1]
-    if (!key?.startsWith('--') || value === undefined) throw new Error('invalid arguments')
+    if (!key?.startsWith('--') || value === undefined) {throw new Error('invalid arguments')}
     values[key.slice(2)] = value
   }
   if (!['pace-check', 'isolate', 'drain', 'activate'].includes(values.mode)) {
@@ -91,7 +91,7 @@ export function parseProductionCapacityCellArguments(argv) {
 
 async function responseJson(response, label) {
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(`${label} returned ${response.status}`)
+  if (!response.ok) {throw new Error(`${label} returned ${response.status}`)}
   return body
 }
 
@@ -102,7 +102,7 @@ async function checkDrainPace(fetchImpl, config, wait) {
     await fetchAdminOnceMore(fetchImpl, `${config.cellOrigin}/health`, {}, { wait }),
     'cell health'
   )
-  if (health.ok !== true) throw new Error('cell health is not ok')
+  if (health.ok !== true) {throw new Error('cell health is not ok')}
   const maxPaceWindowMs = Number.isSafeInteger(health.drainPaceWindowMaxMs)
     ? health.drainPaceWindowMaxMs
     : LEGACY_MAX_PACE_WINDOW_MS
@@ -117,9 +117,9 @@ async function checkDrainPace(fetchImpl, config, wait) {
 
 export async function prepareProductionCapacityCell(config, overrides = {}) {
   const fetchImpl = overrides.fetch ?? fetch
-  if (config.mode === 'pace-check') return await checkDrainPace(fetchImpl, config, overrides.wait)
+  if (config.mode === 'pace-check') {return await checkDrainPace(fetchImpl, config, overrides.wait)}
   const token = overrides.token ?? process.env.ORCA_RELAY_ADMIN_ID_TOKEN
-  if (!token || token.length > 8_192) throw new Error('admin identity token is unavailable')
+  if (!token || token.length > 8_192) {throw new Error('admin identity token is unavailable')}
   const postRaw = async (origin, path, body) =>
     await fetchAdminOnceMore(
       fetchImpl,
@@ -148,7 +148,7 @@ export async function prepareProductionCapacityCell(config, overrides = {}) {
       }
       // A cell still on an image without paced drain rejects the unknown field outright.
       // An unpaced drain is the behaviour that cell already has, so fall back to it.
-      if (paced.status !== 400) throw new Error(`/v1/admin/drain returned ${paced.status}`)
+      if (paced.status !== 400) {throw new Error(`/v1/admin/drain returned ${paced.status}`)}
       await paced.json().catch(() => ({}))
       if (paceWindowMs > LEGACY_MAX_PACE_WINDOW_MS) {
         throw new Error(
@@ -161,7 +161,7 @@ export async function prepareProductionCapacityCell(config, overrides = {}) {
   }
   const before = await inspectAdmissionSelector(post)
   const state = selectorCellState(before.selector, config.cellId)
-  if (state === 'existing-only') throw new Error('production capacity target is irreversible')
+  if (state === 'existing-only') {throw new Error('production capacity target is irreversible')}
   const desiredState = config.mode === 'isolate' ? 'migration-only' : 'general'
   const membership = membershipWithStates(before.selector, { [config.cellId]: desiredState })
   const result = await applyExactAdmissionSelector(post, membership, {

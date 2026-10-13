@@ -3,7 +3,10 @@ import { ORCA_CLI_POSIX_PATH_RESTORE } from '../../shared/orca-cli-shell-path'
 import { MANAGED_DATA_ACCOUNT_POSIX_RESTORE } from '../../shared/managed-data-account-shell'
 import { getPosixCodexShellLaunchPreflight } from '../../shared/codex-shell-function'
 import { getPosixClaudeShellFunction } from '../../shared/claude-shell-function'
-import { BASH_PROMPT_COMMAND_COMPOSITION_BLOCK } from '../bash-prompt-command-composition'
+import {
+  BASH_DEBUG_TRAP_REENTRANCY_GUARD,
+  BASH_PROMPT_COMMAND_COMPOSITION_BLOCK
+} from '../bash-prompt-command-composition'
 import { BASH_FEATURE_CHANNEL_BLOCK, SHELL_STARTUP_IDENTITY_MARKER_BLOCK } from '../shell-templates'
 
 export function getDaemonBashShellReadyRcfileContent(): string {
@@ -63,6 +66,7 @@ __orca_osc133_precmd() {
   return "$exit_code"
 }
 __orca_osc133_preexec() {
+${BASH_DEBUG_TRAP_REENTRANCY_GUARD}
   if [[ -n "\${__orca_prompt_status_capture_command:-}" && "$BASH_COMMAND" == "$__orca_prompt_status_capture_command" ]]; then
     unset __orca_initial_prompt
     __orca_in_legacy_prompt_wrapper=1

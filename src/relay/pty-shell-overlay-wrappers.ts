@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { getPosixOmpShellWrapper } from '../main/pty/omp-shell-wrapper'
 import { ORCA_CLI_POSIX_PATH_RESTORE } from '../shared/orca-cli-shell-path'
 import { getPosixCodexShellLaunchPreflight } from '../shared/codex-shell-function'
+import { BASH_DEBUG_TRAP_REENTRANCY_GUARD } from '../main/bash-prompt-command-composition'
 import {
   BASH_FEATURE_CHANNEL_BLOCK,
   BASH_PROMPT_COMMAND_COMPOSITION_BLOCK,
@@ -95,6 +96,7 @@ __orca_osc133_prompt_done() {
   trap '__orca_osc133_preexec' DEBUG
 }
 __orca_osc133_preexec() {
+${BASH_DEBUG_TRAP_REENTRANCY_GUARD}
   if [[ -n "\${__orca_prompt_status_capture_command:-}" && "$BASH_COMMAND" == "$__orca_prompt_status_capture_command" ]]; then
     unset __orca_initial_prompt
     __orca_in_legacy_prompt_wrapper=1

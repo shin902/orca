@@ -48,13 +48,13 @@ function evaluate(expression, context) {
       assert.equal(tokens[index++], ')')
       return inner
     }
-    if (token.startsWith("'")) return token.slice(1, -1)
+    if (token.startsWith("'")) {return token.slice(1, -1)}
     assert.ok(Object.hasOwn(context, token), `unknown operand ${token}`)
     return context[token]
   }
   const comparison = () => {
     const left = value()
-    if (tokens[index] !== '==' && tokens[index] !== '!=') return left
+    if (tokens[index] !== '==' && tokens[index] !== '!=') {return left}
     const operator = tokens[index++]
     const right = value()
     return operator === '==' ? left === right : left !== right
@@ -89,7 +89,7 @@ test('every job mode comparison names a mode the job can receive', () => {
   const accepted = jobAcceptedModes()
   const compared = [...job.matchAll(/inputs\.mode\s*[!=]=\s*'([^']*)'/g)].map(([, mode]) => mode)
   assert.ok(compared.length > 0)
-  for (const mode of compared) assert.ok(accepted.has(mode), `job compares against ${mode}`)
+  for (const mode of compared) {assert.ok(accepted.has(mode), `job compares against ${mode}`)}
 })
 
 test('the headroom gate runs whenever the drain runs, and in verify', () => {

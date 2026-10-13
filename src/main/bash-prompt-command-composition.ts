@@ -1,3 +1,6 @@
+export const BASH_DEBUG_TRAP_REENTRANCY_GUARD = `  [[ -n "\${__orca_chaining_debug_trap:-}" ]] && return 0
+`
+
 export const BASH_PROMPT_COMMAND_COMPOSITION_BLOCK = `__orca_normalize_prompt_command_part() {
   local __orca_value="$1" __orca_output_name="$2" __orca_character __orca_chunk
   local __orca_value_length=\${#1} __orca_suffix_length=0 __orca_backslash_length=0
@@ -64,6 +67,7 @@ __orca_update_user_debug_trap() {
 }
 __orca_run_user_debug_trap() {
   if [[ -n "\${__orca_user_debug_trap:-}" ]]; then
+    local __orca_chaining_debug_trap=1
     eval "$__orca_user_debug_trap" || true
   fi
 }

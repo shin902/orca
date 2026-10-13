@@ -152,7 +152,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
       await blocker.query(`SELECT n FROM ${table} WHERE id = 'a' FOR UPDATE`)
       const ours = database.transaction(async (transaction) => {
         attempts += 1
-        if (attempts === 2) await blocker.query('COMMIT')
+        if (attempts === 2) {await blocker.query('COMMIT')}
         return await commitWithFinalWrite(transaction, counterUpdate, counterParams('a', 1))
       }, { reportRetries: false })
       await expect(ours).resolves.toBe(true)

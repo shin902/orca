@@ -66,7 +66,7 @@ function mountDocuments(readReply: () => Promise<RpcResponse>) {
     mountFixture<Extract<MobileSessionTab, { type: 'markdown' }>>({
       type: 'markdown',
       id,
-      relativePath: id + '.md',
+      relativePath: `${id}.md`,
       isDirty: false
     })
   return {
@@ -106,10 +106,10 @@ describe('mobile Markdown document lifetime', () => {
     const h = mountDocuments(async () => success(randomBytes(1536 * 1024).toString('base64')))
     try {
       for (let index = 0; index < 20; index += 1) {
-        await h.read('tab-' + index)
-        const doc = h.docs.get('tab-' + index)
+        await h.read(`tab-${index}`)
+        const doc = h.docs.get(`tab-${index}`)
         expect(doc?.status === 'ready' && Buffer.byteLength(doc.content)).toBe(2 * 1024 * 1024)
-        await h.close('tab-' + index)
+        await h.close(`tab-${index}`)
       }
       expect(h.docs.size).toBe(0)
     } finally {

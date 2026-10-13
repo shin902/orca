@@ -71,7 +71,7 @@ export function entryAdmission(cellId) {
 }
 
 function digest(value, name) {
-  if (!/^sha256:[a-f0-9]{64}$/.test(value ?? '')) throw new Error(`${name} is invalid`)
+  if (!/^sha256:[a-f0-9]{64}$/.test(value ?? '')) {throw new Error(`${name} is invalid`)}
   return value
 }
 
@@ -82,7 +82,7 @@ function cells(value) {
     parsed.length > 10 ||
     new Set(parsed).size !== parsed.length ||
     parsed.some((cell) => !SAME_CAP_CELLS.includes(cell))
-  ) throw new Error('same-cap wave cells are invalid')
+  ) {throw new Error('same-cap wave cells are invalid')}
   // Every later cell offsets from one per-wave selector delta, and the two classes
   // have different ones, so a mixed wave has no single offset any cell could use.
   if (new Set(parsed.map(selectorWaveDelta)).size > 1) {
@@ -98,7 +98,7 @@ export function validateSameCapWave(input) {
   const selected = cells(input.cellIds)
   const targetDigest = digest(input.targetDigest, 'target digest')
   const rollbackDigest = digest(input.rollbackDigest, 'rollback digest')
-  if (targetDigest === rollbackDigest) throw new Error('target and rollback digests must differ')
+  if (targetDigest === rollbackDigest) {throw new Error('target and rollback digests must differ')}
   if (input.mode === 'canary-apply' && selected.length !== 1) {
     throw new Error('canary mode requires exactly one cell')
   }
@@ -120,7 +120,7 @@ export function validateSameCapWave(input) {
   if (mutation && input.confirmation !== expectedConfirmation) {
     throw new Error('same-cap confirmation does not match the exact digest and cells')
   }
-  if (!mutation && input.confirmation) throw new Error('verify does not accept confirmation')
+  if (!mutation && input.confirmation) {throw new Error('verify does not accept confirmation')}
   if (input.mode === 'batch-apply' && !/^[1-9][0-9]*$/.test(input.canaryRunId ?? '')) {
     throw new Error('batch mode requires a canary run ID')
   }
@@ -146,14 +146,14 @@ export function canaryPaceVerdict(report, cellId, paceWindowMs) {
     report.drain?.appliedPaceWindowMs !== paceWindowMs ||
     !(report.drain?.targetHosts >= CANARY_MIN_DRAINED_HOSTS) ||
     !CANARY_PACE_VERDICTS.includes(report.paceVerdict)
-  ) return 'UNVERIFIED'
+  ) {return 'UNVERIFIED'}
   return report.paceVerdict
 }
 
 export function canaryAuthority(input) {
   const wave = validateSameCapWave({ ...input, mode: 'canary-apply', canaryRunId: '' })
-  if (!/^[0-9a-f]{40}$/.test(input.commitSha ?? '')) throw new Error('commit SHA is invalid')
-  if (!/^[1-9][0-9]*$/.test(input.runId ?? '')) throw new Error('run ID is invalid')
+  if (!/^[0-9a-f]{40}$/.test(input.commitSha ?? '')) {throw new Error('commit SHA is invalid')}
+  if (!/^[1-9][0-9]*$/.test(input.runId ?? '')) {throw new Error('run ID is invalid')}
   const selectorGeneration = Number(input.selectorGeneration)
   const rehomeGeneration = Number(input.rehomeGeneration)
   if (!Number.isSafeInteger(selectorGeneration) || selectorGeneration < 0) {
@@ -196,7 +196,7 @@ export function verifyCanaryAuthority(authority, expected, repositoryRoot) {
     !SAME_CAP_CELLS.includes(authority.cellId) ||
     !SAME_CAP_DRAIN_PACE_WINDOWS_MS.includes(authority.drainPaceWindowMs) ||
     !CANARY_PACE_VERDICTS.includes(authority.paceVerdict)
-  ) throw new Error('canary authority does not match this batch')
+  ) {throw new Error('canary authority does not match this batch')}
   // A canary proves its own pace and every slower one; a faster batch needs its own canary, and
   // falling back to a slower pace mid-ladder never does.
   if (batchPaceWindowMs < authority.drainPaceWindowMs) {
@@ -289,7 +289,7 @@ export function main(argv = process.argv.slice(2)) {
   }
   if (command === 'cell-class') {
     const cellId = input['cell-id']
-    if (!SAME_CAP_CELLS.includes(cellId)) throw new Error('same-cap wave cells are invalid')
+    if (!SAME_CAP_CELLS.includes(cellId)) {throw new Error('same-cap wave cells are invalid')}
     process.stdout.write(`${JSON.stringify({
       entryAdmission: entryAdmission(cellId),
       selectorWaveDelta: selectorWaveDelta(cellId),

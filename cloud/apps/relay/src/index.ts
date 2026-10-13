@@ -70,7 +70,7 @@ const inventorySnapshotTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const snapshot = await readAssignmentInventorySnapshot(database, Date.now())
-        for (const line of formatAssignmentInventorySnapshot(snapshot)) console.warn(line)
+        for (const line of formatAssignmentInventorySnapshot(snapshot)) {console.warn(line)}
       }, '[orca-relay] inventory snapshot failed')
     }, 60_000)
   : null
@@ -78,7 +78,7 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const inventory = await readRegisteredMigrationInventory(database, Date.now())
-        for (const line of formatRegisteredMigrationInventory(inventory)) console.warn(line)
+        for (const line of formatRegisteredMigrationInventory(inventory)) {console.warn(line)}
         console.log(
           JSON.stringify({
             event: 'orca_relay_region_correction_outcomes',
@@ -94,7 +94,7 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
 let lockWaitSampling = false
 const lockWaitSampleTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
-      if (database.dialect !== 'postgres' || lockWaitSampling) return
+      if (database.dialect !== 'postgres' || lockWaitSampling) {return}
       lockWaitSampling = true
       void runRelayBackgroundOperation(async () => {
         observability.recordDatabaseLockWaitSample(await readPostgresLockWaitSample(database))
@@ -150,11 +150,11 @@ server.listen(config.port, () => {
 })
 
 const shutdown = (): void => {
-  if (cleanupTimer) clearInterval(cleanupTimer)
-  if (assignmentCleanupTimer) clearInterval(assignmentCleanupTimer)
-  if (inventorySnapshotTimer) clearInterval(inventorySnapshotTimer)
-  if (migrationInventoryTimer) clearInterval(migrationInventoryTimer)
-  if (lockWaitSampleTimer) clearInterval(lockWaitSampleTimer)
+  if (cleanupTimer) {clearInterval(cleanupTimer)}
+  if (assignmentCleanupTimer) {clearInterval(assignmentCleanupTimer)}
+  if (inventorySnapshotTimer) {clearInterval(inventorySnapshotTimer)}
+  if (migrationInventoryTimer) {clearInterval(migrationInventoryTimer)}
+  if (lockWaitSampleTimer) {clearInterval(lockWaitSampleTimer)}
   observability.stop()
   heartbeat?.stop()
   regionalRehomeWorker?.stop()

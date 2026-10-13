@@ -370,12 +370,12 @@ it('keeps 64 admitted copies after 64 surface/hook unmounts without new timers',
     const view = mounted()
     views.push(view)
     act(() => {
-      copying.push(view.api.handleSelectionCopy('handle', 'copy' + index))
+      copying.push(view.api.handleSelectionCopy('handle', `copy${index}`))
     })
     act(() => view.root.unmount())
   }
   expect(boundary.writeText.mock.calls).toEqual(
-    Array.from({ length: 64 }, (_, index) => ['copy' + index])
+    Array.from({ length: 64 }, (_, index) => [`copy${index}`])
   )
   expect(vi.getTimerCount()).toBe(0)
   await act(async () => {

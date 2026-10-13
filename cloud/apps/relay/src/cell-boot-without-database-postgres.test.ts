@@ -12,10 +12,10 @@ const describePostgres = databaseUrl ? describe : describe.skip
 // c25 exited after 45 s of boot retries when its database was unreachable, and the MIG
 // recreated it into the same loop. A cell now opens a lazy pool and listens at once.
 describePostgres('cell boot while PostgreSQL is unreachable', () => {
-  const cleanups: Array<() => Promise<void>> = []
+  const cleanups: (() => Promise<void>)[] = []
 
   afterEach(async () => {
-    for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
+    for (const cleanup of cleanups.splice(0).toReversed()) {await cleanup()}
   })
 
   it('listens with /health 200 and /ready 503, then turns ready once the database answers', async () => {
@@ -87,7 +87,7 @@ async function listenOn<T extends Server | ReturnType<typeof createTcpServer>>(
 }
 
 async function close(server: Server | ReturnType<typeof createTcpServer>): Promise<void> {
-  if ('closeAllConnections' in server) server.closeAllConnections()
+  if ('closeAllConnections' in server) {server.closeAllConnections()}
   await new Promise<void>((resolve) => server.close(() => resolve()))
 }
 

@@ -14,7 +14,7 @@ async function unusedPort(): Promise<number> {
   const server = createNetServer()
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('missing test port')
+  if (!address || typeof address === 'string') {throw new Error('missing test port')}
   await new Promise<void>((resolve) => server.close(() => resolve()))
   return address.port
 }
@@ -67,10 +67,10 @@ function cellConfig(port: number, issuer: string): RelayConfig {
 }
 
 describe('host hello shedding under database pool pressure', () => {
-  const cleanup: Array<() => Promise<void> | void> = []
+  const cleanup: (() => Promise<void> | void)[] = []
 
   afterEach(async () => {
-    for (const close of cleanup.splice(0).reverse()) await close()
+    for (const close of cleanup.splice(0).toReversed()) {await close()}
     vi.restoreAllMocks()
   })
 
@@ -88,7 +88,7 @@ describe('host hello shedding under database pool pressure', () => {
     await new Promise<void>((resolve) => jwksServer.listen(0, '127.0.0.1', resolve))
     cleanup.push(() => new Promise<void>((resolve) => jwksServer.close(() => resolve())))
     const jwksAddress = jwksServer.address()
-    if (!jwksAddress || typeof jwksAddress === 'string') throw new Error('missing JWKS address')
+    if (!jwksAddress || typeof jwksAddress === 'string') {throw new Error('missing JWKS address')}
     const issuer = `http://127.0.0.1:${jwksAddress.port}`
 
     const realNow = Date.now()
@@ -96,7 +96,7 @@ describe('host hello shedding under database pool pressure', () => {
     // Before the database exists, so the pool's wait clock reads it too.
     vi.spyOn(Date, 'now').mockImplementation(() => realNow + elapsedMs)
     const database = new PostgresDatabase(stalledPool() as never)
-    for (let index = 0; index < waiters; index++) void database.query('SELECT 1').catch(() => {})
+    for (let index = 0; index < waiters; index++) {void database.query('SELECT 1').catch(() => {})}
     const port = await unusedPort()
     const relay = createRelayServer(cellConfig(port, issuer), database)
     relay.server.listen(port, '127.0.0.1')

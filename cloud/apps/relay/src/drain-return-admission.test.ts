@@ -56,12 +56,12 @@ function harness(
 }
 
 function admitted(result: DrainReturnGrant | DrainReturnDeferral): DrainReturnGrant {
-  if (result.kind !== 'admitted') throw new Error(`expected admission, got ${result.reason}`)
+  if (result.kind !== 'admitted') {throw new Error(`expected admission, got ${result.reason}`)}
   return result
 }
 
 function deferred(result: DrainReturnGrant | DrainReturnDeferral): DrainReturnDeferral {
-  if (result.kind !== 'deferred') throw new Error('expected a deferral')
+  if (result.kind !== 'deferred') {throw new Error('expected a deferral')}
   return result
 }
 
@@ -91,7 +91,7 @@ describe('drain-return admission', () => {
       for (let index = 0; index < 40; index++) {
         settled.push(
           lane.acquire(host(index)).then((result) => {
-            if (result.kind === 'deferred') answers.push(result.retryAfterSeconds)
+            if (result.kind === 'deferred') {answers.push(result.retryAfterSeconds)}
           })
         )
         await Promise.resolve()
@@ -174,7 +174,7 @@ describe('drain-return admission', () => {
   it('keeps a host’s reserved slot when it comes back early', async () => {
     const { lane, advance } = harness()
     admitted(await lane.acquire(host(0)))
-    for (let index = 1; index <= 4; index++) await lane.acquire(host(index))
+    for (let index = 1; index <= 4; index++) {await lane.acquire(host(index))}
     expect(deferred(await lane.acquire(host(5))).retryAfterSeconds).toBe(6)
 
     advance(1_000)

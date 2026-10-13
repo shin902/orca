@@ -141,7 +141,7 @@ class OneShotInventoryFailureDatabase implements RelayDatabase {
       this.retryLocks.push('inventory-nowait-failed')
       throw new Error('database_lock_unavailable')
     }
-    if (this.failed && inventory) this.retryLocks.push('inventory-first')
+    if (this.failed && inventory) {this.retryLocks.push('inventory-first')}
     if (this.failed && sql.includes('FROM relay_assignments')) {
       this.retryLocks.push(options.failIfUnavailable ? 'assignment-nowait' : 'assignment')
     }
@@ -245,7 +245,7 @@ class SeedBetweenAssignmentLanesDatabase implements RelayDatabase {
     operation: (transaction: RelayDatabase) => Promise<T>,
     options?: RelayTransactionOptions
   ): Promise<T> {
-    if (this.armed && ++this.transactions === 2) await this.seed()
+    if (this.armed && ++this.transactions === 2) {await this.seed()}
     return await this.delegate.transaction(operation, options)
   }
 
@@ -1199,7 +1199,7 @@ describe('RelayAssignmentStore', () => {
       await store.setCellEnabled('cell-a', false)
       const evidence = cellFenceEvidence()
       await store.prepareCellFenceAttempt(evidence)
-      if (status === 'aborted') await store.abortCellFenceAttempt(evidence)
+      if (status === 'aborted') {await store.abortCellFenceAttempt(evidence)}
       if (status === 'completed') {
         await store.bindCellFencePlanGeneration(evidence, evidence.planObjectGeneration)
         await store.startCellFenceApply(
@@ -1669,7 +1669,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-b', url: 'https://relay-b.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     await store.setCellEnabled('cell-b', false)
     const busy = { userId: 'a-busy', relayHostId: 'host000000000001' }
     const later = { userId: 'b-later', relayHostId: 'host000000000002' }
@@ -1682,7 +1682,7 @@ describe('RelayAssignmentStore', () => {
     // The sweep reaches the busy host first: its own release holds its row.
     const assign = store.assign.bind(store)
     vi.spyOn(store, 'assign').mockImplementation(async (identity, ...rest) => {
-      if (identity.relayHostId === busy.relayHostId) throw new RelayAssignmentRowBusyError()
+      if (identity.relayHostId === busy.relayHostId) {throw new RelayAssignmentRowBusyError()}
       return await assign(identity, ...rest)
     })
 
@@ -1709,7 +1709,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     await store.setCellEnabled('cell-b', false)
     await store.setCellEnabled('cell-c', false)
     const cappedIdentity = { userId: 'a-capped', relayHostId: 'host000000000001' }
@@ -2565,7 +2565,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     await store.setCellEnabled('cell-b', false)
     await store.setCellEnabled('cell-c', false)
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
@@ -2679,11 +2679,11 @@ describe('RelayAssignmentStore', () => {
       cellId: 'cell-b',
       assignmentEpoch: migration.assignmentEpoch
     })
-    if (releaseSourceControl) await store.releaseActivity(identity, sourceControl)
-    if (disableSource) await store.setCellEnabled('cell-a', false)
+    if (releaseSourceControl) {await store.releaseActivity(identity, sourceControl)}
+    if (disableSource) {await store.setCellEnabled('cell-a', false)}
     // The desktop leaves the half-migrated target, then an operator disables that cell.
     await store.releaseActivity(identity, targetControl)
-    if (disableTarget) await store.setCellEnabled('cell-b', false)
+    if (disableTarget) {await store.setCellEnabled('cell-b', false)}
     return { store, identity }
   }
 
@@ -3155,7 +3155,7 @@ describe('RelayAssignmentStore', () => {
     let attempts = 0
     vi.spyOn(store, 'supersedeRegisteredEvacuation').mockImplementation(async (...args) => {
       attempts++
-      if (attempts === 2) expect(await store.abortExpiredEvacuations()).toBe(1)
+      if (attempts === 2) {expect(await store.abortExpiredEvacuations()).toBe(1)}
       return await supersede(...args)
     })
 
@@ -3595,7 +3595,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3703,7 +3703,7 @@ describe('RelayAssignmentStore', () => {
       heartbeatTtlMs: 45_000
     })
     await store.reconcileCells(cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3755,7 +3755,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3819,7 +3819,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-d', url: 'https://relay-d.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     const sourceControl = await store.activateControl(identity, {
@@ -3886,7 +3886,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => 100, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {
@@ -3935,7 +3935,7 @@ describe('RelayAssignmentStore', () => {
       { id: 'cell-c', url: 'https://relay-c.example.com', capacityRequests: 10 }
     ]
     const store = await setupWithHeartbeats(() => now, cells)
-    for (const cell of cells) await heartbeat(store, cell)
+    for (const cell of cells) {await heartbeat(store, cell)}
     const identity = { userId: 'user-a', relayHostId: 'host000000000001' }
     const first = await store.assign(identity)
     await store.activateControl(identity, {

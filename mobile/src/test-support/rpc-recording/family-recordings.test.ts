@@ -38,11 +38,9 @@ async function certify(id: string, scenarios: RecordingScenario[]) {
       expect(bytes).toBe(first)
     }
     first = bytes
-    if (process.env.RPC_FOUNDATION_MODE === '--record') {
-      await writeGolden(directory, golden, '--record')
-    } else {
-      await expectGoldenFile(directory, id, golden)
-    }
+    await (process.env.RPC_FOUNDATION_MODE === '--record'
+      ? writeGolden(directory, golden, '--record')
+      : expectGoldenFile(directory, id, golden))
   }
 }
 

@@ -109,13 +109,13 @@ function harness(input: {
     collect: async () => {
       const result = input.sampleAt?.(samples, clock) ?? greenSample(clock)
       samples += 1
-      if (result instanceof Error) throw result
+      if (result instanceof Error) {throw result}
       return result
     },
     readHardRules: async () => {
       const result = input.hardRulesAt?.(reads) ?? calm
       reads += 1
-      if (result instanceof Error) throw result
+      if (result instanceof Error) {throw result}
       return result
     }
   })
@@ -348,7 +348,7 @@ describe('runPreDrainSample', () => {
       wait: async (ms) => { clock += ms },
       collect: async () => greenSample(clock),
       readHardRules: async () => {
-        if (records.length === 1) throw new Error('Google telemetry returned 403')
+        if (records.length === 1) {throw new Error('Google telemetry returned 403')}
         return calm
       },
       log: (record) => records.push(record.errors)

@@ -24,7 +24,8 @@ export function runInteractiveBashRcfile(rcfileContent: string, tempDir: string)
         ...process.env,
         HOME: tempDir,
         ORCA_SHELL_FEATURES: 'ready',
-        TERM: process.env.TERM || 'xterm'
+        TERM: 'dumb',
+        WEZTERM_SHELL_SKIP_ALL: '1'
       },
       timeout: 5000
     }

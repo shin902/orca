@@ -110,7 +110,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
       )
       return true
     } catch (error) {
-      if (error instanceof Error && error.message === 'database_lock_unavailable') return false
+      if (error instanceof Error && error.message === 'database_lock_unavailable') {return false}
       throw error
     }
   }
@@ -162,7 +162,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
       const probeStartedAt = performance.now()
       const state: Record<string, boolean> = {}
       for (const [role, cellId] of Object.entries(probed)) {
-        for (const table of CELL_TABLES) state[`${role}:${table}`] = await lockable(table, cellId)
+        for (const table of CELL_TABLES) {state[`${role}:${table}`] = await lockable(table, cellId)}
       }
       trips.push({ sql, lockable: state, probeMs: performance.now() - probeStartedAt })
     }
@@ -178,7 +178,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
     expect(trips[trips.length - 1]!.sql).toBe('COMMIT')
     for (const trip of trips) {
       for (const [key, free] of Object.entries(trip.lockable)) {
-        if (TARGET_LOCKED.includes(key)) continue
+        if (TARGET_LOCKED.includes(key)) {continue}
         expect({ sql: trip.sql, key, free }).toEqual({ sql: trip.sql, key, free: true })
       }
     }
@@ -212,7 +212,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
     const context = await fixture()
     const request = await context.select()
     control.beforeTrip = async (sql) => {
-      if (!sql.includes('WITH target AS')) return
+      if (!sql.includes('WITH target AS')) {return}
       await observer.transaction(
         async (transaction) => await flipAdmission(transaction, context.target.id, context.now())
       )
@@ -233,7 +233,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
     const released = new Promise<void>((resolve) => (release = resolve))
     let writer: Promise<void> | undefined
     control.beforeTrip = async (sql) => {
-      if (!sql.includes('WITH target AS') || writer) return
+      if (!sql.includes('WITH target AS') || writer) {return}
       let locked!: () => void
       const lockedPromise = new Promise<void>((resolve) => (locked = resolve))
       writer = observer.transaction(async (transaction) => {
@@ -270,7 +270,7 @@ describePostgres('PostgreSQL regional rehome target-row lock', () => {
     freeSeats: number
   ): Promise<void> {
     control.beforeTrip = async (sql) => {
-      if (!sql.includes('WITH target AS')) return
+      if (!sql.includes('WITH target AS')) {return}
       const foreign = await observer.query(
         `SELECT COUNT(*) AS count FROM relay_control_connection_reservations
          WHERE cell_id = ? AND state IN ('reserved', 'late-arrival-debt', 'claimed')

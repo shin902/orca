@@ -64,7 +64,7 @@ describe('code-block fence sizing', () => {
       if (!editor || !codeElement) {
         throw new Error('The loaded Markdown document has no code block')
       }
-      codeElement.textContent = code + 'a'
+      codeElement.textContent = `${code}a`
       posted.length = 0
 
       const match = String.prototype.match

@@ -28,6 +28,10 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/**/*.live-shell.test.ts',
   'src/**/*real-pty*.test.ts',
   'src/**/*-native.test.ts',
+  // These unsuffixed suites drive real node-pty shells used by Electron main.
+  'src/main/daemon/repro-13767-shell-ready-marker-lost-to-exec.test.ts',
+  'src/main/daemon/shell-ready.test.ts',
+  'src/main/shell-startup-feature-channel.test.ts',
   'src/**/*retention*.test.ts',
   'src/**/*lifetime*.test.ts',
   'src/**/*memory*.test.ts',
@@ -40,6 +44,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/agent-hooks/server-transport-interference.test.ts',
   'src/main/plugins/plugin-worker-supervision.integration.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',
+  // GC timer fairness is an Electron/Node event-loop contract, not Bun's timer cadence.
+  'src/main/terminal-history-gc.test.ts',
   'src/main/computer/macos-native-provider-client.test.ts',
   'src/main/ai-vault-search/session-search-schema.test.ts',
   'src/main/ai-vault-search/session-search-fts5-contract.test.ts',

@@ -55,7 +55,7 @@ export class RelayDrainReturnAdmission {
       reason = rejection
     })
     if (!lease)
-      return { kind: 'deferred', reason, retryAfterSeconds: this.retryAfter(relayHostId, reason) }
+      {return { kind: 'deferred', reason, retryAfterSeconds: this.retryAfter(relayHostId, reason) }}
     this.reservations.delete(relayHostId)
     const startedAt = this.now()
     let released = false
@@ -63,7 +63,7 @@ export class RelayDrainReturnAdmission {
       kind: 'admitted',
       lease: {
         release: () => {
-          if (released) return
+          if (released) {return}
           released = true
           this.recordService(this.now() - startedAt)
           lease.release()

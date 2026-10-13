@@ -70,7 +70,7 @@ describe('PostgreSQL pool pressure', () => {
 describe('PostgreSQL pool priority lane', () => {
   // pg-pool's acquire contract with a hand-driven supply of free connections.
   function controlledPool(max: number, connectionTimeoutMillis = 0) {
-    const pending: Array<(client: unknown) => void> = []
+    const pending: ((client: unknown) => void)[] = []
     const pool = {
       options: { max, connectionTimeoutMillis },
       totalCount: 0,
@@ -93,7 +93,7 @@ describe('PostgreSQL pool priority lane', () => {
           if (next) {
             pool.waitingCount--
             next(client())
-          } else pool.totalCount--
+          } else {pool.totalCount--}
         })
       })
     return pool
@@ -121,7 +121,7 @@ describe('PostgreSQL pool priority lane', () => {
     priorityClient.release()
     const generalClient = await queuedGeneral
     expect(order).toEqual(['priority', 'general'])
-    for (const client of [general[1]!, generalClient]) client.release()
+    for (const client of [general[1]!, generalClient]) {client.release()}
     expect(pool.totalCount).toBe(0)
     expect(pressure.peekCounts().databasePoolWaiting).toBe(0)
   })

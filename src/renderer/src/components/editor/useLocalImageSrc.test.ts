@@ -471,7 +471,8 @@ describe('useLocalImageSrc runtime owner', () => {
     onRender: (displaySrc: string | undefined) => void
     runtimeContext: RuntimeFileOperationArgs
   }): null {
-    onRender(useLocalImageSrc(imageSrc, documentPath, null, runtimeContext))
+    const displaySrc = useLocalImageSrc(imageSrc, documentPath, null, runtimeContext)
+    useEffect(() => onRender(displaySrc), [displaySrc, onRender])
     return null
   }
 

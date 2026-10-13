@@ -212,7 +212,7 @@ export function createRelayApp(
     let released = false
     return {
       release: () => {
-        if (released) return
+        if (released) {return}
         released = true
         operations.recordAdmissionServiceMs?.('sticky', performance.now() - startedAt)
         lease.release()
@@ -260,9 +260,9 @@ export function createRelayApp(
     reason: AssignmentAdmissionRejection | undefined
     retryAfterSeconds?: number
   }): void => {
-    if (!input.reason) return
+    if (!input.reason) {return}
     const entry: AdmissionRejectionLogEntry = { ...input, reason: input.reason }
-    if (!rejectionLogWindow.admit(`${entry.route}:${entry.lane}:${entry.reason}`, entry)) return
+    if (!rejectionLogWindow.admit(`${entry.route}:${entry.lane}:${entry.reason}`, entry)) {return}
     logAssignmentRejection(entry)
   }
   app.use('/v1/admin/*', async (context, next) => {
@@ -273,7 +273,7 @@ export function createRelayApp(
       return await next()
     }
     const bearer = readBearer(context.req.header('authorization'))
-    if (!bearer || !(await verifyAdminToken(bearer))) return await next()
+    if (!bearer || !(await verifyAdminToken(bearer))) {return await next()}
     if (!(await verifyAdminToken(bearer, context.req.path))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -291,18 +291,18 @@ export function createRelayApp(
     })
   )
   app.get('/ready', async (context) => {
-    if (!(await operations.ready())) return context.json({ error: 'dependency_unavailable' }, 503)
+    if (!(await operations.ready())) {return context.json({ error: 'dependency_unavailable' }, 503)}
     const dependency = operations.readinessDegradation?.() ?? []
     // Still the 200 the load balancer needs, with the marker that says the answer is remembered.
-    if (dependency.length === 0) return context.json({ ok: true })
+    if (dependency.length === 0) {return context.json({ ok: true })}
     return context.json({ ok: true, degraded: true, dependency })
   })
   app.get('/v1/regions', async (context) => {
-    if (config.role === 'cell') return context.json({ error: 'director_only' }, 404)
+    if (config.role === 'cell') {return context.json({ error: 'director_only' }, 404)}
     try {
       return context.json({ v: 1, regions: await regionCatalog() })
     } catch (error) {
-      if (!isRelayDatabaseTransientError(error)) throw error
+      if (!isRelayDatabaseTransientError(error)) {throw error}
       // Same contract as the assignment routes: a database that is briefly out
       // of reach is a retry, not a director fault.
       context.header('Retry-After', String(config.publicAssignmentRetryAfterSeconds))
@@ -310,20 +310,20 @@ export function createRelayApp(
     }
   })
   app.post('/v1/assign', async (context) => {
-    if (config.role === 'cell') return context.json({ error: 'director_only' }, 404)
+    if (config.role === 'cell') {return context.json({ error: 'director_only' }, 404)}
     if (!config.publicAssignmentsEnabled) {
       operations.recordAssignmentUnavailable?.('disabled')
       return rejectPublicAssignment(context)
     }
     const bearer = readBearer(context.req.header('authorization'))
-    if (!bearer) return context.json({ error: 'invalid_token' }, 401)
+    if (!bearer) {return context.json({ error: 'invalid_token' }, 401)}
     const claims = await verifyRelayToken(bearer)
-    if (!claims) return context.json({ error: 'invalid_token' }, 401)
+    if (!claims) {return context.json({ error: 'invalid_token' }, 401)}
     if (Number(context.req.header('content-length') ?? 0) > 4 * 1024) {
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AssignmentRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (body.data.relayHostId !== claims.relayHostId) {
       return context.json({ error: 'host_identity_mismatch' }, 403)
     }
@@ -431,7 +431,7 @@ export function createRelayApp(
     try {
       if (body.data.regionCorrection?.action === 'report') {
         const current = await operations.assignments.resolve(identity)
-        if (!current) return context.json({ error: 'assignment_not_found' }, 409)
+        if (!current) {return context.json({ error: 'assignment_not_found' }, 409)}
         assignment = current
       } else {
         assignment = requestedRegion
@@ -446,7 +446,7 @@ export function createRelayApp(
             assignment.assignmentEpoch
           )
         } catch (error) {
-          if (body.data.regionCorrection.action === 'report') throw error
+          if (body.data.regionCorrection.action === 'report') {throw error}
           // Optional measurement setup must not discard an otherwise valid placement.
           console.warn(JSON.stringify({ event: 'orca_relay_region_window_unavailable' }))
         }
@@ -531,15 +531,15 @@ export function createRelayApp(
     })
   })
   app.post('/v1/resolve', async (context) => {
-    if (config.role === 'cell') return context.json({ error: 'director_only' }, 404)
-    if (!config.publicAssignmentsEnabled) return rejectPublicAssignment(context)
+    if (config.role === 'cell') {return context.json({ error: 'director_only' }, 404)}
+    if (!config.publicAssignmentsEnabled) {return rejectPublicAssignment(context)}
     if (
       Number(context.req.header('content-length') ?? 0) > RELAY_PROTOCOL_LIMITS.maxHttpBodyBytes
     ) {
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = ResolveRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     let rejection: AssignmentAdmissionRejection | undefined
     const admission = await publicAssignmentAdmission.acquireReserved(
       body.data.relayHostId,
@@ -562,7 +562,7 @@ export function createRelayApp(
         body.data.relayHostId,
         body.data.resumeToken
       )
-      if (!resolved) return context.json({ error: 'invalid_credential' }, 401)
+      if (!resolved) {return context.json({ error: 'invalid_credential' }, 401)}
       const identity = {
         userId: resolved.userId,
         relayHostId: body.data.relayHostId
@@ -594,7 +594,7 @@ export function createRelayApp(
         }
         return context.json({ error: operationError(error) }, 503)
       }
-      if (isRelayDatabaseTransientError(error)) return rejectPublicAssignment(context)
+      if (isRelayDatabaseTransientError(error)) {return rejectPublicAssignment(context)}
       throw error
     } finally {
       admission.release()
@@ -614,7 +614,7 @@ export function createRelayApp(
       })
       .strict()
       .safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     const paceWindowMs = body.data.paceWindowMs ?? 0
     operations.drain(body.data.graceMs, { paceWindowMs })
     return context.json({ ok: true, paceWindowMs })
@@ -633,7 +633,7 @@ export function createRelayApp(
     const body = IdleRegionalRehomeCommandSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (
       body.data.sourceCellId !== config.cellId ||
       !operations.cellIncarnation ||
@@ -661,7 +661,7 @@ export function createRelayApp(
     const body = RegionalHostDrainSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (
       body.data.sourceCellId !== config.cellId ||
       !operations.cellIncarnation ||
@@ -707,7 +707,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = RuntimeStatusSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     return context.json({
       v: 1,
       role: config.role,
@@ -735,7 +735,7 @@ export function createRelayApp(
     })
   })
   app.post('/v1/admin/cell-heartbeat', async (context) => {
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     const bearer = readBearer(context.req.header('authorization'))
     if (!bearer || !(await verifyRuntimeToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
@@ -744,7 +744,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = CellHeartbeatSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.recordCellHeartbeat(body.data)
       return context.json({ ok: true })
@@ -753,7 +753,7 @@ export function createRelayApp(
     }
   })
   app.post('/v1/admin/cell-rehome-status', async (context) => {
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     const bearer = readBearer(context.req.header('authorization'))
     if (!bearer || !(await verifyRuntimeToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
@@ -764,7 +764,7 @@ export function createRelayApp(
     const body = CellRegionalRehomeStatusSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.recordCellRegionalRehomeStatus(body.data)
       return context.json({ ok: true })
@@ -773,7 +773,7 @@ export function createRelayApp(
     }
   })
   app.get('/v1/admin/regional-rehome-preview', async (context) => {
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     const bearer = readBearer(context.req.header('authorization'))
     if (!bearer || !(await verifyAdminToken(bearer, context.req.path))) {
       return context.json({ error: 'invalid_token' }, 401)
@@ -785,7 +785,7 @@ export function createRelayApp(
     return context.json({ v: 1, preview, outcomes })
   })
   app.post('/v1/admin/regional-rehome-control', async (context) => {
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     const bearer = readBearer(context.req.header('authorization'))
     if (!bearer || !(await verifyAdminToken(bearer, context.req.path))) {
       return context.json({ error: 'invalid_token' }, 401)
@@ -796,7 +796,7 @@ export function createRelayApp(
     const body = RegionalRehomeControlSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (body.data.action === 'inspect') {
       const control = await operations.assignments.inspectRegionalRehomeControl()
       return context.json({ v: 1, control })
@@ -812,7 +812,7 @@ export function createRelayApp(
     }
   })
   app.post('/v1/admin/regional-rehome-trust-probe', async (context) => {
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     const bearer = readBearer(context.req.header('authorization'))
     if (!bearer || !(await verifyAdminToken(bearer, context.req.path))) {
       return context.json({ error: 'invalid_token' }, 401)
@@ -823,7 +823,7 @@ export function createRelayApp(
     const body = RegionalRehomeTrustProbeSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (!config.rehomeAudience || !config.rehomeDirectorServiceAccount) {
       return context.json({ error: 'regional_rehome_trust_not_configured' }, 409)
     }
@@ -857,7 +857,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/evacuate', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -865,7 +865,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminAssignmentMoveSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const migration = await operations.assignments.startEvacuation(
         { userId: body.data.userId, relayHostId: body.data.relayHostId },
@@ -878,7 +878,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/migration-complete', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -886,7 +886,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminMigrationCompleteSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.completeEvacuation(
         { userId: body.data.userId, relayHostId: body.data.relayHostId },
@@ -899,7 +899,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/migration-supersede-cell', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -909,7 +909,7 @@ export function createRelayApp(
     const body = AdminRegisteredCellMigrationSupersedeSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const superseded = await operations.assignments.supersedeRegisteredCellEvacuations(
         body.data.sourceCellId,
@@ -924,7 +924,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/rebalance-dormant', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -932,7 +932,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminAssignmentMoveSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const assignment = await operations.assignments.rebalanceDormant(
         { userId: body.data.userId, relayHostId: body.data.relayHostId },
@@ -945,7 +945,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/admission-selector/apply', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -955,7 +955,7 @@ export function createRelayApp(
     const body = AdminAdmissionSelectorApplySchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const result = await operations.assignments.applyCellAdmissionSelector(body.data)
       return context.json({ v: 1, ...result })
@@ -965,7 +965,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/admission-selector/apply-staging-asia-proof', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -975,7 +975,7 @@ export function createRelayApp(
     const body = AdminStagingAsiaProofAdmissionApplySchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const current = await operations.assignments.inspectCellAdmissionSelector()
       const result = await operations.assignments.applyCellAdmissionSelector({
@@ -990,7 +990,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/admission-selector/status', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1000,7 +1000,7 @@ export function createRelayApp(
     const body = AdminAdmissionSelectorStatusSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const result = await operations.assignments.inspectCellAdmissionSelector(
         body.data.attemptId
@@ -1012,7 +1012,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/admission-selector/add-migration-cells', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1022,7 +1022,7 @@ export function createRelayApp(
     const body = AdminAdmissionSelectorAddMigrationCellsSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const result = await operations.assignments.addMigrationCells({
         attemptId: body.data.attemptId,
@@ -1043,7 +1043,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-state', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1051,7 +1051,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminCellStateSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.setCellAdmissionState(
         body.data.cellId,
@@ -1068,7 +1068,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-adopt-legacy', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1078,7 +1078,7 @@ export function createRelayApp(
     const body = AdminCellFenceLegacyAdoptionSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const expiresAt = await operations.assignments.adoptLegacyCellFence(
         body.data.cellId,
@@ -1091,7 +1091,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-commit-legacy-adoption', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1101,7 +1101,7 @@ export function createRelayApp(
     const body = AdminCellFenceLegacyAdoptionCommitSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.commitLegacyCellFenceAdoption(
         body.data.cellId,
@@ -1114,7 +1114,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attest', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1124,7 +1124,7 @@ export function createRelayApp(
     const body = AdminCellFenceAttestSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const result = await operations.assignments.attestCellFenceAttempt(
@@ -1143,7 +1143,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-prepare', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1153,7 +1153,7 @@ export function createRelayApp(
     const body = AdminCellFenceAttemptPrepareSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const attempt = await operations.assignments.prepareCellFenceAttempt(evidence)
@@ -1164,7 +1164,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-start', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1174,7 +1174,7 @@ export function createRelayApp(
     const body = AdminCellFenceAttemptUpdateSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const result = await operations.assignments.startCellFenceApply(
@@ -1189,7 +1189,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-plan', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1199,7 +1199,7 @@ export function createRelayApp(
     const body = AdminCellFencePlanSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const attempt = await operations.assignments.bindCellFencePlanGeneration(
@@ -1213,7 +1213,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-operation', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1223,7 +1223,7 @@ export function createRelayApp(
     const body = AdminCellFenceOperationSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const result = await operations.assignments.recordCellFenceOperation(
@@ -1239,7 +1239,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-status', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1249,7 +1249,7 @@ export function createRelayApp(
     const body = AdminCellFenceAttemptStatusSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const attempt = await operations.assignments.cellFenceAttempt(body.data.cellId)
       return context.json({ v: 1, attempt })
@@ -1259,7 +1259,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-fence-attempt-abort', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1269,7 +1269,7 @@ export function createRelayApp(
     const body = AdminCellFenceAttemptAbortSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const evidence = cellFenceAttemptEvidence(body.data)
       const attempt = await operations.assignments.abortCellFenceAttempt(evidence)
@@ -1280,7 +1280,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/drain-attempt-prepare', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1290,7 +1290,7 @@ export function createRelayApp(
     const body = AdminDrainAttemptPrepareSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const result = await operations.assignments.prepareCellDrainAttempt({
         attemptId: body.data.attemptId,
@@ -1306,7 +1306,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/drain-attempt-send', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1316,7 +1316,7 @@ export function createRelayApp(
     const body = AdminDrainAttemptMutationSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const attempt = await operations.assignments.beginCellDrainSend(body.data)
       return context.json({ v: 1, attempt })
@@ -1326,7 +1326,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/drain-attempt-receipt', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1336,7 +1336,7 @@ export function createRelayApp(
     const body = AdminDrainAttemptReceiptSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const attempt = await operations.assignments.recordCellDrainApplicationReceipt(
         body.data
@@ -1348,7 +1348,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/drain-attempt-recover-forward', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1358,7 +1358,7 @@ export function createRelayApp(
     const body = AdminDrainAttemptRecoverSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const result = await operations.assignments.prepareCellDrainRecovery(body.data)
       return context.json({ v: 1, ...result })
@@ -1368,7 +1368,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/cell-config', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1376,7 +1376,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminCellConfigSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       await operations.assignments.configureCell(
         {
@@ -1395,7 +1395,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/evacuate-cell', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1403,7 +1403,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminCellEvacuateSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const started = await operations.assignments.startActiveCellEvacuations(
         body.data.sourceCellId,
@@ -1417,7 +1417,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/evacuation-capacity', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1427,7 +1427,7 @@ export function createRelayApp(
     const body = AdminCellEvacuationCapacitySchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const capacity = await operations.assignments.cellEvacuationCapacity(
         body.data.sourceCellId,
@@ -1440,7 +1440,7 @@ export function createRelayApp(
   })
   app.post('/v1/admin/evacuation-status', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1450,7 +1450,7 @@ export function createRelayApp(
     const body = AdminCellEvacuationStatusSchema.safeParse(
       await context.req.json().catch(() => null)
     )
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     if (body.data.completeReady && (await verifyReadOnlyAdminToken(bearer))) {
       return context.json({ error: 'insufficient_permission' }, 403)
     }
@@ -1462,13 +1462,13 @@ export function createRelayApp(
       )
       return context.json({ v: 1, ...status })
     } catch (error) {
-      if (!isRelayDatabaseTransientError(error)) throw error
+      if (!isRelayDatabaseTransientError(error)) {throw error}
       return context.json({ error: 'database_temporarily_unavailable' }, 503)
     }
   })
   app.post('/v1/admin/cell-status', async (context) => {
     const bearer = readBearer(context.req.header('authorization'))
-    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (config.role !== 'director') {return context.json({ error: 'director_only' }, 404)}
     if (!bearer || !(await verifyAdminToken(bearer))) {
       return context.json({ error: 'invalid_token' }, 401)
     }
@@ -1476,7 +1476,7 @@ export function createRelayApp(
       return context.json({ error: 'request_too_large' }, 413)
     }
     const body = AdminCellStatusSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {return context.json({ error: 'invalid_request' }, 400)}
     try {
       const status = await operations.assignments.cellDeploymentStatus(body.data.cellId)
       return context.json({ v: 1, status })
@@ -1665,7 +1665,7 @@ const RegionalRehomeControlSchema = z
       .strict()
   ])
   .superRefine((value, context) => {
-    if (value.action !== 'apply') return
+    if (value.action !== 'apply') {return}
     const expected = value.enabled ? 'ENABLE_REGIONAL_REHOMING' : 'DISABLE_REGIONAL_REHOMING'
     if (value.confirmation !== expected) {
       context.addIssue({ code: 'custom', message: 'confirmation does not match state' })
@@ -2078,13 +2078,12 @@ function logAssignmentRejection(input: {
   retryAfterSeconds?: number
 }): void {
   console.warn(
-    `[orca-relay] assignment rejected route=${input.route} lane=${input.lane}` +
-      ` hinted=${input.hinted} reason=${input.reason}` +
-      ` host=${relayHostLogDigest(input.relayHostId)}` +
-      (input.retryAfterSeconds === undefined ? '' : ` retryAfter=${input.retryAfterSeconds}`) +
-      (input.cause === undefined ? '' : ` cause=${input.cause}`) +
-      (input.cell === undefined ? '' : ` cell=${input.cell}`) +
-      (input.suppressed === undefined ? '' : ` suppressed=${input.suppressed}`)
+    `[orca-relay] assignment rejected route=${input.route} lane=${input.lane} hinted=${input.hinted} reason=${input.reason}` +
+      ` host=${relayHostLogDigest(input.relayHostId)}${
+        input.retryAfterSeconds === undefined ? '' : ` retryAfter=${input.retryAfterSeconds}`
+      }${input.cause === undefined ? '' : ` cause=${input.cause}`}${
+        input.cell === undefined ? '' : ` cell=${input.cell}`
+      }${input.suppressed === undefined ? '' : ` suppressed=${input.suppressed}`}`
   )
 }
 
@@ -2100,7 +2099,7 @@ const RELAY_ASSIGNMENT_UNAVAILABLE_ERRORS = [
 function assignmentUnavailableCause(
   error: unknown
 ): (typeof RELAY_ASSIGNMENT_UNAVAILABLE_ERRORS)[number] | undefined {
-  if (!(error instanceof Error)) return undefined
+  if (!(error instanceof Error)) {return undefined}
   return RELAY_ASSIGNMENT_UNAVAILABLE_ERRORS.find((message) => message === error.message)
 }
 

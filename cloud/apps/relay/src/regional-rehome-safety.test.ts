@@ -154,7 +154,7 @@ describe('regional rehome sql failure breach', () => {
 
   it('sustains a breach watched for the whole window', () => {
     const samples: [number, number][] = []
-    for (let at = 0; at <= REGIONAL_REHOME_SQL_FAILURES_SUSTAIN_MS; at += 6_000) samples.push([at, STORM])
+    for (let at = 0; at <= REGIONAL_REHOME_SQL_FAILURES_SUSTAIN_MS; at += 6_000) {samples.push([at, STORM])}
     const breach = observe(samples)
     expect(breach && regionalRehomeSqlFailuresSustained(breach)).toBe(true)
   })

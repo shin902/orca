@@ -103,7 +103,9 @@ export async function runZshPty(options: ZshPtyOptions): Promise<ZshPtyRun> {
       ...options.env,
       // Why the sentinel is env-borne: the prompt is overwritten from the PTY
       // below, and it has to survive whatever prompt the user's config installs.
-      ORCA_PTY_SENTINEL: sentinel
+      ORCA_PTY_SENTINEL: sentinel,
+      // Keep host login integrations out of shell-contract assertions.
+      WEZTERM_SHELL_SKIP_ALL: '1'
     }
   })
 

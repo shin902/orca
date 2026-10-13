@@ -48,7 +48,7 @@ const CELL_SHAPES = {
 // Every reviewed wave is single-region, so its first cell's zone names the region.
 function waveRegion(environment, cells) {
   const zone = CELL_SHAPES[environment]?.cells[cells[0]]
-  if (!zone) throw new Error('--cell-ids must be the exact reviewed Asia topology set')
+  if (!zone) {throw new Error('--cell-ids must be the exact reviewed Asia topology set')}
   return zone.slice(0, zone.lastIndexOf('-'))
 }
 
@@ -57,13 +57,13 @@ export function parseRelayAsiaTopologyPlanArguments(argv) {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index]
     const value = argv[index + 1]
-    if (!key?.startsWith('--') || value === undefined) throw new Error('invalid arguments')
+    if (!key?.startsWith('--') || value === undefined) {throw new Error('invalid arguments')}
     values[key.slice(2)] = value
   }
   for (const key of ['plan-json', 'environment', 'cell-ids', 'region', 'image']) {
-    if (!values[key]) throw new Error(`missing --${key}`)
+    if (!values[key]) {throw new Error(`missing --${key}`)}
   }
-  if (!(values.environment in CELL_SHAPES)) throw new Error('--environment is invalid')
+  if (!(values.environment in CELL_SHAPES)) {throw new Error('--environment is invalid')}
   const cells = values['cell-ids'].split(',').map((value) => value.trim()).filter(Boolean)
   const sorted = JSON.stringify([...cells].sort())
   if (
@@ -73,7 +73,7 @@ export function parseRelayAsiaTopologyPlanArguments(argv) {
     throw new Error('--cell-ids must be the exact reviewed Asia topology set')
   }
   const region = waveRegion(values.environment, cells)
-  if (values.region !== region) throw new Error(`--region must be ${region}`)
+  if (values.region !== region) {throw new Error(`--region must be ${region}`)}
   const expectedImagePrefix = `us-central1-docker.pkg.dev/${CELL_SHAPES[values.environment].project}/orca-cloud/relay@sha256:`
   if (!values.image.startsWith(expectedImagePrefix) || !/sha256:[a-f0-9]{64}$/.test(values.image)) {
     throw new Error('--image must be the environment Relay image pinned by digest')
@@ -128,7 +128,7 @@ function requireCellTemplate(change, config, cellId, region) {
     startupValue(script, 'ORCA_RELAY_IMAGE_DIGEST') !== config.image.split('@')[1] ||
     !script.includes(`docker pull '${config.image}'`) ||
     !script.trimEnd().includes(`'${config.image}'`)
-  ) throw new Error(`${change.address} does not have the reviewed Asia cell shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed Asia cell shape`)}
 }
 
 function requireCellManager(change, config, cellId) {
@@ -147,7 +147,7 @@ function requireCellManager(change, config, cellId) {
     after?.update_policy?.[0]?.replacement_method !== 'RECREATE' ||
     after?.update_policy?.[0]?.max_surge_fixed !== 0 ||
     after?.update_policy?.[0]?.max_unavailable_fixed !== 1
-  ) throw new Error(`${change.address} does not have the reviewed fixed-one Asia MIG shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed fixed-one Asia MIG shape`)}
 }
 
 function requireCellBackend(change, config, cellId) {
@@ -172,24 +172,24 @@ function requireCellBackend(change, config, cellId) {
     backend?.capacity_scaler !== 1 ||
     !unknownOrMatches(backend?.group, (value) =>
       value.endsWith(`/zones/${zone}/instanceGroups/${name}`))
-  ) throw new Error(`${change.address} does not have the reviewed Asia backend shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed Asia backend shape`)}
 }
 
 function requireNetworkResource(change, config, region) {
   const after = change.change.after
   const networkSuffix = `/global/networks/${relayGceName(config.environment)}`
-  if (after?.region !== region) throw new Error(`${change.address} is outside ${region}`)
+  if (after?.region !== region) {throw new Error(`${change.address} is outside ${region}`)}
   if (
     change.address.startsWith('google_compute_subnetwork.') &&
     (after.ip_cidr_range !== '10.42.1.0/24' ||
       after.private_ip_google_access !== true ||
       after.stack_type !== 'IPV4_ONLY' ||
       !unknownOrMatches(after.network, (value) => value.endsWith(networkSuffix)))
-  ) throw new Error(`${change.address} does not have the reviewed Asia subnet shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed Asia subnet shape`)}
   if (
     change.address.startsWith('google_compute_router.') &&
     !unknownOrMatches(after.network, (value) => value.endsWith(networkSuffix))
-  ) throw new Error(`${change.address} does not have the reviewed Asia router shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed Asia router shape`)}
   if (
     change.address.startsWith('google_compute_router_nat.') &&
     (after.nat_ip_allocate_option !== 'AUTO_ONLY' ||
@@ -201,11 +201,11 @@ function requireNetworkResource(change, config, region) {
         )) ||
       JSON.stringify(after.subnetwork[0]?.source_ip_ranges_to_nat) !==
         JSON.stringify(['ALL_IP_RANGES']))
-  ) throw new Error(`${change.address} does not have the reviewed Asia NAT shape`)
+  ) {throw new Error(`${change.address} does not have the reviewed Asia NAT shape`)}
 }
 
 function canonical(value) {
-  if (!Array.isArray(value)) return JSON.stringify(value ?? [])
+  if (!Array.isArray(value)) {return JSON.stringify(value ?? [])}
   return JSON.stringify([...value].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))))
 }
 
@@ -281,7 +281,7 @@ function requireUrlMap(change, config) {
 }
 
 export function validateRelayAsiaTopologyPlan(plan, config) {
-  if (!Array.isArray(plan.resource_changes)) throw new Error('Terraform plan has no resource changes')
+  if (!Array.isArray(plan.resource_changes)) {throw new Error('Terraform plan has no resource changes')}
   const region = waveRegion(config.environment, config.cells)
   // The root region's network predates every cell, so only an additional region's is planned.
   const required = new Map(region === PRIMARY_REGION ? [] : [

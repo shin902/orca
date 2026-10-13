@@ -107,7 +107,7 @@ export class RelayPublicAssignmentAdmission {
       this.queuedDrainReturnHosts.add(relayHostId)
       cancelWait = schedule(() => {
         const index = this.pendingDrainReturns.indexOf(pending)
-        if (index === -1) return
+        if (index === -1) {return}
         this.pendingDrainReturns.splice(index, 1)
         this.queuedDrainReturnHosts.delete(relayHostId)
         notifyRejected('wait-timeout')
@@ -158,7 +158,7 @@ export class RelayPublicAssignmentAdmission {
       this.queuedAssignmentHosts.add(relayHostId)
       cancelWait = schedule(() => {
         const index = this.pendingAssignments.indexOf(pending)
-        if (index === -1) return
+        if (index === -1) {return}
         this.pendingAssignments.splice(index, 1)
         this.queuedAssignmentHosts.delete(relayHostId)
         resolve(this.reject('wait-timeout', notifyRejected))
@@ -205,7 +205,7 @@ export class RelayPublicAssignmentAdmission {
         notifyRejected
       }
       cancelWait = schedule(() => {
-        if (this.pendingReserved?.relayHostId !== relayHostId) return
+        if (this.pendingReserved?.relayHostId !== relayHostId) {return}
         this.pendingReserved = undefined
         resolve(this.reject('wait-timeout', notifyRejected))
         this.grantPendingAssignments()
@@ -228,7 +228,7 @@ export class RelayPublicAssignmentAdmission {
     let released = false
     return {
       release: () => {
-        if (released) return
+        if (released) {return}
         released = true
         this.active = Math.max(0, this.active - 1)
         if (kind === 'reserved') {
@@ -311,7 +311,7 @@ export class RelayPublicAssignmentAdmission {
     const index = this.pendingAssignments.findIndex(
       (pending) => pending.relayHostId === relayHostId
     )
-    if (index === -1) return
+    if (index === -1) {return}
     const [pending] = this.pendingAssignments.splice(index, 1)
     this.queuedAssignmentHosts.delete(relayHostId)
     pending?.cancelWait()

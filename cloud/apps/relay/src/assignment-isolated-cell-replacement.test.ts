@@ -45,7 +45,7 @@ const databases: RelayDatabase[] = []
 
 afterEach(async () => {
   vi.restoreAllMocks()
-  for (const database of databases.splice(0)) await database.close()
+  for (const database of databases.splice(0)) {await database.close()}
 })
 
 // Counts the reads this change adds, so the general hot path can be held to a
@@ -160,7 +160,7 @@ async function setup(cells: RelayCellConfig[] = CELLS): Promise<Harness> {
   await store.reconcileCells(cells, true)
   const heartbeat = async (cell: RelayCellConfig, at?: number): Promise<void> => {
     const previous = now
-    if (at !== undefined) now = at
+    if (at !== undefined) {now = at}
     try {
       await store.recordCellHeartbeat({
         cellId: cell.id,
@@ -178,10 +178,10 @@ async function setup(cells: RelayCellConfig[] = CELLS): Promise<Harness> {
         connectionUnobservedBound: cell.connectionUnobservedBound ?? 50
       })
     } finally {
-      if (at !== undefined) now = previous
+      if (at !== undefined) {now = previous}
     }
   }
-  for (const cell of cells) await heartbeat(cell)
+  for (const cell of cells) {await heartbeat(cell)}
 
   const applySelector = async (
     states: Record<string, CellAdmissionState>,
@@ -201,9 +201,9 @@ async function setup(cells: RelayCellConfig[] = CELLS): Promise<Harness> {
           : current.selector.membership.existingOnly.includes(cell.id)
             ? 'existing-only'
             : 'general')
-      if (state === 'migration-only') membership.migrationOnly.push(cell.id)
-      else if (state === 'existing-only') membership.existingOnly.push(cell.id)
-      else membership.general.push(cell.id)
+      if (state === 'migration-only') {membership.migrationOnly.push(cell.id)}
+      else if (state === 'existing-only') {membership.existingOnly.push(cell.id)}
+      else {membership.general.push(cell.id)}
     }
     await store.applyCellAdmissionSelector({
       attemptId: `attempt-${current.selector.generation}-${Object.keys(states).join('-')}`,
@@ -354,7 +354,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
 
     const later = START_MS + age
     setNow(later)
-    for (const cell of CELLS) await heartbeat(cell, later)
+    for (const cell of CELLS) {await heartbeat(cell, later)}
     const grant = await store.assign(IDENTITY, 'us-central1')
 
     if (moves) {
@@ -413,7 +413,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
 
     // Past the stranded rule's minimum grant age, which outlives the heartbeat TTL.
     setNow(START_MS + 61_000)
-    for (const cell of CELLS) await heartbeat(cell, START_MS + 61_000)
+    for (const cell of CELLS) {await heartbeat(cell, START_MS + 61_000)}
     expect(await store.assign(IDENTITY, 'us-central1')).toMatchObject({
       cellId: first.cellId,
       assignmentEpoch: first.assignmentEpoch
@@ -523,7 +523,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
     const { store, isolateForRoll, park } = await setup()
     const first = await store.assign(IDENTITY, 'us-central1')
     for (const cell of CELLS) {
-      if (cell.id !== first.cellId) await park(cell.id, 'migration-only')
+      if (cell.id !== first.cellId) {await park(cell.id, 'migration-only')}
     }
     await isolateForRoll(first.cellId)
 
@@ -574,7 +574,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
     const stale = START_MS + HEARTBEAT_TTL_MS + 1_000
     setNow(stale)
     for (const cell of CELLS) {
-      if (cell.id !== first.cellId) await heartbeat(cell, stale)
+      if (cell.id !== first.cellId) {await heartbeat(cell, stale)}
     }
 
     await expect(store.assign(IDENTITY, 'us-central1')).rejects.toBeInstanceOf(
@@ -801,7 +801,7 @@ describe('classifying a reconnect whose home is isolated for a roll', () => {
 
     const stale = START_MS + 2 * 60 * 60_000 + 1
     setNow(stale)
-    for (const cell of CELLS) await heartbeat(cell, stale)
+    for (const cell of CELLS) {await heartbeat(cell, stale)}
     expect(await store.resolve(IDENTITY, classify)).not.toHaveProperty('homeCellRollIsolated')
 
     setNow(START_MS)

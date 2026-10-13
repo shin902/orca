@@ -59,9 +59,9 @@ export function regionalRehomeSafetyFailure(
   }
   const reconnectLimit =
     Math.max(1, requiredCells) * REGIONAL_REHOME_RECONNECTS_PER_CELL_LIMIT
-  if (safety.reconnects > reconnectLimit) return 'elevated_reconnects'
+  if (safety.reconnects > reconnectLimit) {return 'elevated_reconnects'}
   // Last, so 'sql_failures' means no latching reason also failed.
-  if (safety.sqlFailures > REGIONAL_REHOME_SQL_FAILURES_LIMIT) return 'sql_failures'
+  if (safety.sqlFailures > REGIONAL_REHOME_SQL_FAILURES_LIMIT) {return 'sql_failures'}
   return null
 }
 
@@ -80,7 +80,7 @@ export function nextRegionalRehomeSqlFailuresBreach(
   sqlFailures: number,
   now: number
 ): RegionalRehomeSqlFailuresBreach {
-  if (sqlFailures <= REGIONAL_REHOME_SQL_FAILURES_LIMIT) return null
+  if (sqlFailures <= REGIONAL_REHOME_SQL_FAILURES_LIMIT) {return null}
   if (!breach || now - breach.lastSeenAt > REGIONAL_REHOME_SQL_FAILURES_OBSERVATION_GAP_MS) {
     return { since: now, lastSeenAt: now }
   }

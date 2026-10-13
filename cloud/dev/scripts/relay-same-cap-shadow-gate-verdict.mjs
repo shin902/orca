@@ -71,7 +71,7 @@ const MINUTE_MS = 60_000
 
 export function parseTimestamp(value, label) {
   const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN
-  if (Number.isNaN(parsed)) throw new Error(`${label} is not an RFC 3339 timestamp: ${value}`)
+  if (Number.isNaN(parsed)) {throw new Error(`${label} is not an RFC 3339 timestamp: ${value}`)}
   return new Date(parsed)
 }
 
@@ -94,7 +94,7 @@ export function resolveWindow({
   const startedAt = start
     ? parseTimestamp(start, 'window start')
     : new Date(endedAt.getTime() - fallbackMinutes * MINUTE_MS)
-  if (startedAt >= endedAt) throw new Error('shadow gate window starts at or after it ends')
+  if (startedAt >= endedAt) {throw new Error('shadow gate window starts at or after it ends')}
   return { startedAt, endedAt, startedFrom: drainStartedAt ? 'drain' : start ? 'apply' : 'fallback' }
 }
 
@@ -118,7 +118,7 @@ export function countByMinute(reads, limit = ENTRY_LIMIT) {
   const perMinute = new Map()
   let truncated = false
   for (const read of reads) {
-    if (read.failed || read.timestamps.length >= limit) truncated = true
+    if (read.failed || read.timestamps.length >= limit) {truncated = true}
     for (const timestamp of read.timestamps) {
       const minute = timestamp.slice(0, 16)
       perMinute.set(minute, (perMinute.get(minute) ?? 0) + 1)
@@ -143,7 +143,7 @@ export function longestRunAtOrAbove(values, threshold) {
   let run = 0
   for (const value of values) {
     run = value > threshold ? run + 1 : 0
-    if (run > longest) longest = run
+    if (run > longest) {longest = run}
   }
   return longest
 }
@@ -328,12 +328,12 @@ export function judgeNonDrain503Budget({ observed, background }) {
     // The record a ladder rung keeps: non-drain 503s per minute from the drain start.
     perMinute: observed.series
   }
-  if (observed.unverified || background.unverified) return { status: 'unverified', ...detail }
+  if (observed.unverified || background.unverified) {return { status: 'unverified', ...detail }}
   if (
     detail.consecutiveMinutesOverBlock >= consecutiveMinutes ||
     observed.peak > detail.spikeAbove
-  ) return { status: 'would-block', ...detail }
-  if (detail.consecutiveMinutesOverWarn >= consecutiveMinutes) return { status: 'warn', ...detail }
+  ) {return { status: 'would-block', ...detail }}
+  if (detail.consecutiveMinutesOverWarn >= consecutiveMinutes) {return { status: 'warn', ...detail }}
   return { status: 'pass', ...detail }
 }
 
@@ -350,7 +350,7 @@ export function judgeDrainDeferrals(drain) {
     warnAbove: warnRetryAfterSecondsAbove,
     blockAbove: blockRetryAfterSecondsAbove
   }
-  if (drain.truncated) return { status: 'unverified', ...detail }
+  if (drain.truncated) {return { status: 'unverified', ...detail }}
   if (drain.retryAfterSecondsMax > blockRetryAfterSecondsAbove) {
     return { status: 'would-block', ...detail }
   }
@@ -377,9 +377,9 @@ export function judgeCellServing({ listeningAt, crashesSinceApply, read, expectB
     crashesSinceApply: crashesSinceApply ?? 0,
     expectBoot
   }
-  if (read?.failed) return { status: 'unverified', ...detail }
-  if (!listeningAt) return { status: expectBoot ? 'would-block' : 'unverified', ...detail }
-  if (detail.crashesSinceApply > 0) return { status: 'would-block', ...detail }
+  if (read?.failed) {return { status: 'unverified', ...detail }}
+  if (!listeningAt) {return { status: expectBoot ? 'would-block' : 'unverified', ...detail }}
+  if (detail.crashesSinceApply > 0) {return { status: 'would-block', ...detail }}
   return { status: 'pass', ...detail }
 }
 
@@ -407,14 +407,14 @@ export function judgePool({ label, samples, failed = false, truncated = false })
     truncated
   }
   // A sample over the failure line is a fact however many others are missing.
-  if (detail.sqlFailuresDeltaMax > sqlFailuresDelta) return { status: 'would-block', ...detail }
+  if (detail.sqlFailuresDeltaMax > sqlFailuresDelta) {return { status: 'would-block', ...detail }}
   // A truncated sample run has holes, and the consecutive-sample rule reads a hole as a recovery
   // (or joins two runs across one), so it is judged only on a complete run.
-  if (failed || truncated || samples.length === 0) return { status: 'unverified', ...detail }
+  if (failed || truncated || samples.length === 0) {return { status: 'unverified', ...detail }}
   if (detail.consecutiveSamplesOverWaitersThreshold >= waitersConsecutiveSamples) {
     return { status: 'would-block', ...detail }
   }
-  if (detail.waitersMax > waitersMax) return { status: 'warn', ...detail }
+  if (detail.waitersMax > waitersMax) {return { status: 'warn', ...detail }}
   return { status: 'pass', ...detail }
 }
 
@@ -422,9 +422,9 @@ export function judgeCloudSqlFatal({ count, truncated = false, failed = false })
   const { warnAbove, blockAbove } = SHADOW_GATE_THRESHOLDS.cloudSqlFatal
   const detail = { count, warnAbove, blockAbove }
   // A truncated count is a lower bound: already over the line is a block, under it proves nothing.
-  if (count > blockAbove) return { status: 'would-block', ...detail }
-  if (failed || truncated) return { status: 'unverified', ...detail }
-  if (count > warnAbove) return { status: 'warn', ...detail }
+  if (count > blockAbove) {return { status: 'would-block', ...detail }}
+  if (failed || truncated) {return { status: 'unverified', ...detail }}
+  if (count > warnAbove) {return { status: 'warn', ...detail }}
   return { status: 'pass', ...detail }
 }
 
@@ -434,8 +434,8 @@ export const PACE_CHECKS = ['nonDrain503Budget', 'drainDeferrals']
 
 export function combineVerdict(checks) {
   const statuses = Object.values(checks).map((check) => check.status)
-  if (statuses.includes('would-block')) return VERDICTS.WOULD_BLOCK
-  if (statuses.includes('unverified') || statuses.includes('warn')) return VERDICTS.WARN
+  if (statuses.includes('would-block')) {return VERDICTS.WOULD_BLOCK}
+  if (statuses.includes('unverified') || statuses.includes('warn')) {return VERDICTS.WARN}
   return VERDICTS.PASS
 }
 
