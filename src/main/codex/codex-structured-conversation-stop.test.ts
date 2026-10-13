@@ -1,7 +1,9 @@
 // A Codex Stop that names no turn. The fake keeps Codex 0.157's turn bookkeeping: it answers
-// `turn/start` before it opens the turn, and refuses an interrupt until then.
+// `turn/start` before it opens the turn, and refuses an interrupt with no turn active until the
+// thread runs.
 
 import { describe, expect, it, vi } from 'vitest'
+import { structuredAgentSessionCommandTurn } from '../native-chat/agent-session-wire/structured-agent-session-command-turn'
 import {
   CODEX_TEST_THREAD_ID,
   codexTurnLifecycleRig
@@ -28,7 +30,7 @@ describe('a Codex Stop that names no turn', () => {
     const rig = await codexTurnLifecycleRig()
     await openedTurn(rig)
 
-    await expect(stop(rig, () => null)).resolves.toEqual({ cancelled: true })
+    await expect(stop(rig, () => null)).resolves.toEqual({ cancelled: true, turnId: 'turn-1' })
     expect(rig.interrupts().map((call) => call.params?.turnId)).toEqual(['turn-1'])
   })
 
@@ -51,7 +53,9 @@ describe('a Codex Stop that names no turn', () => {
         detail: {
           text: 'expected active turn id turn-journal but found turn-1',
           audience: 'person'
-        }
+        },
+        // An invalid-request refusal: the named turn is not the one Codex is running.
+        turnNotRunning: true
       }
     })
     expect(rig.interrupts().map((call) => call.params?.turnId)).toEqual(['turn-journal'])
@@ -71,16 +75,21 @@ describe('a Codex Stop that names no turn', () => {
     const rig = await codexTurnLifecycleRig()
     await openedTurn(rig)
     rig.turns.end('completed')
+    const turn = structuredAgentSessionCommandTurn('operation-1')
     const compaction = rig.adapter.compact({
-      turnId: 'compact:operation-1',
       sessionId: 'session-1',
-      fence: 7
+      fence: 7,
+      command: {
+        clientMessageId: 'operation-1',
+        ...turn,
+        running: { kind: 'turn', turnId: turn.turnId, state: 'running' }
+      }
     })
     await vi.waitFor(() =>
       expect(rig.codex.connections[0]!.calls.at(-1)?.method).toBe('thread/compact/start')
     )
 
-    await expect(stop(rig, () => 'compact:operation-1')).resolves.toEqual({ cancelled: false })
+    await expect(stop(rig, () => turn.turnId)).resolves.toEqual({ cancelled: false })
     expect(rig.interrupts()).toEqual([])
 
     rig.notify('turn/started', { threadId: CODEX_TEST_THREAD_ID, turn: { id: 'turn-compact' } })
@@ -89,6 +98,6 @@ describe('a Codex Stop that names no turn', () => {
       threadId: CODEX_TEST_THREAD_ID,
       turn: { id: 'turn-compact', status: 'completed' }
     })
-    await expect(compaction).resolves.toEqual({ outcome: 'compacted' })
+    await expect(compaction).resolves.toEqual({ state: 'accepted', providerIdentity: null })
   })
 })
