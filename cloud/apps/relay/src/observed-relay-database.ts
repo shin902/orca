@@ -31,6 +31,7 @@ export function observeRelayDatabase(
     )
   const queryPriority = database.queryPriority?.bind(database)
   const commitWithFinal = database.commitWithFinal?.bind(database)
+  const commitWithFinalStatement = database.commitWithFinalStatement?.bind(database)
   return {
     dialect: database.dialect,
     query,
@@ -40,6 +41,15 @@ export function observeRelayDatabase(
           queryPriority: (sql: string, params?: unknown[]): Promise<SqlRow[]> =>
             timedRelayOperation(
               () => queryPriority(sql, params),
+              (durationMs, success) => observer.recordSql(durationMs, success)
+            )
+        }
+      : {}),
+    ...(commitWithFinalStatement
+      ? {
+          commitWithFinalStatement: (sql: string, params?: unknown[]): Promise<boolean> =>
+            timedRelayOperation(
+              () => commitWithFinalStatement(sql, params),
               (durationMs, success) => observer.recordSql(durationMs, success)
             )
         }

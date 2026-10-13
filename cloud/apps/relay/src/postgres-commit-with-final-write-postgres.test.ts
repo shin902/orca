@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import pg from 'pg'
 import {
+  commitWithFinalStatement,
   commitWithFinalWrite,
   openRelayDatabase,
   type RelayDatabase
@@ -21,7 +22,15 @@ function counterParams(id: string, delta: number): unknown[] {
 // The counter write and COMMIT travel as one simple-query message. These pin the
 // outcomes callers rely on: a server error means COMMIT never ran, and only a
 // lost connection leaves the outcome unknown.
-describePostgres('PostgreSQL counter write committed in the same round trip', () => {
+describePostgres.each([
+  { mode: 'counter write', commit: commitWithFinalWrite, finalStatement: counterUpdate },
+  {
+    mode: 'compound guarded statement',
+    commit: commitWithFinalStatement,
+    finalStatement: `WITH counter_write AS (${counterUpdate})
+      SELECT 1 / CASE WHEN COUNT(*) = 1 THEN 1 ELSE 0 END AS accepted FROM counter_write`
+  }
+])('PostgreSQL $mode committed in the same round trip', ({ commit, finalStatement }) => {
   let database: RelayDatabase
   let other: RelayDatabase
   let admin: pg.Client
@@ -67,7 +76,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
     const result = await database.transaction(async (transaction) => {
       await transaction.query(`INSERT INTO ${table}_log (id, note) VALUES (?, ?)`, ['a', 'x'])
       const before = sent.mock.calls.length
-      const committed = await commitWithFinalWrite(transaction, counterUpdate, counterParams("it's", 1))
+      const committed = await commit(transaction, finalStatement, counterParams("it's", 1))
       messagesForCommit = sent.mock.calls.length - before
       return committed
     })
@@ -87,7 +96,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
     const read = await database.transaction(async (transaction) => {
       attempts += 1
       await transaction.query(`INSERT INTO ${table}_log (id, note) VALUES (?, ?)`, ['a', 'x'])
-      if (await commitWithFinalWrite(transaction, counterUpdate, counterParams('a', 1))) {
+      if (await commit(transaction, finalStatement, counterParams('a', 1))) {
         return 'committed'
       }
       // Already rolled back, so this runs outside the aborted transaction.
@@ -103,7 +112,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
   it('reports a missing row the same way', async () => {
     const read = await database.transaction(async (transaction) => {
       await transaction.query(`INSERT INTO ${table}_log (id, note) VALUES (?, ?)`, ['z', 'x'])
-      if (await commitWithFinalWrite(transaction, counterUpdate, counterParams('z', -1))) {
+      if (await commit(transaction, finalStatement, counterParams('z', -1))) {
         return 'committed'
       }
       const rows = await transaction.query(`SELECT id FROM ${table} WHERE id = ?`, ['z'])
@@ -133,7 +142,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
       await transaction.query(`UPDATE ${table} SET n = n WHERE id = 'a'`)
       await otherHolding
       ourHold()
-      return await commitWithFinalWrite(transaction, counterUpdate, counterParams('b', 1))
+      return await commit(transaction, finalStatement, counterParams('b', 1))
     }, { reportRetries: false })
     const [mine, their] = await Promise.allSettled([ours, theirs])
     // Whichever side PostgreSQL picks as the victim retries and then succeeds.
@@ -153,7 +162,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
       const ours = database.transaction(async (transaction) => {
         attempts += 1
         if (attempts === 2) {await blocker.query('COMMIT')}
-        return await commitWithFinalWrite(transaction, counterUpdate, counterParams('a', 1))
+        return await commit(transaction, finalStatement, counterParams('a', 1))
       }, { reportRetries: false })
       await expect(ours).resolves.toBe(true)
     } finally {
@@ -177,7 +186,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
         setTimeout(() => {
           void admin.query('SELECT pg_terminate_backend($1)', [pid])
         }, 200)
-        return await commitWithFinalWrite(transaction, counterUpdate, counterParams('a', 1))
+        return await commit(transaction, finalStatement, counterParams('a', 1))
       })
       await expect(ours).rejects.toThrow()
     } finally {
@@ -193,7 +202,7 @@ describePostgres('PostgreSQL counter write committed in the same round trip', ()
   it('refuses a statement after the fused commit', async () => {
     await expect(
       database.transaction(async (transaction) => {
-        await commitWithFinalWrite(transaction, counterUpdate, counterParams('a', 1))
+        await commit(transaction, finalStatement, counterParams('a', 1))
         await transaction.query(`INSERT INTO ${table}_log (id, note) VALUES (?, ?)`, ['a', 'late'])
       })
     ).rejects.toThrow('postgres_transaction_already_committed')

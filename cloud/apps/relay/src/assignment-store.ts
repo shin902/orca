@@ -67,6 +67,7 @@ import {
 } from './control-renewal-statement.js'
 import {
   commitWithFinalWrite,
+  commitWithFinalStatement,
   REGIONAL_REHOME_DEFAULT_HOST_COOLDOWN_MS
 } from './database.js'
 import type { RelayCellConfig } from './config.js'
@@ -4226,6 +4227,9 @@ export class RelayAssignmentStore {
     return await this.activityQueue.run(identity, async () => {
       const now = this.now()
       return await this.database.transaction(async (transaction) => {
+        if (transaction.dialect === 'postgres' && transaction.commitWithFinalStatement) {
+          return await this.releaseActivityPostgres(transaction, identity, activityId, now)
+        }
         await this.assignmentRow(transaction, identity)
         const activityLeases = await this.lockAssignmentActivities(transaction, identity)
         const existing = activityLeaseById(activityLeases, activityId)
@@ -4252,6 +4256,67 @@ export class RelayAssignmentStore {
         return true
       })
     })
+  }
+
+  private async releaseActivityPostgres(
+    transaction: RelayDatabase,
+    identity: AssignmentIdentity,
+    activityId: string,
+    now: number
+  ): Promise<boolean> {
+    const leases = await transaction.query(
+      `WITH assignment AS MATERIALIZED (
+         SELECT user_id, relay_host_id FROM relay_assignments
+         WHERE user_id = ? AND relay_host_id = ? FOR UPDATE
+       )
+       SELECT lease.* FROM relay_assignment_activity_leases lease
+       JOIN assignment USING (user_id, relay_host_id)
+       ORDER BY lease.activity_id ASC FOR UPDATE OF lease`,
+      [identity.userId, identity.relayHostId]
+    )
+    const existing = activityLeaseById(leases, activityId)
+    if (!existing) {return false}
+
+    const column = ACTIVITY_COLUMN[activityKind(existing)]
+    const delta = -integer(existing, 'request_units')
+    const cellId = text(existing, 'cell_id')
+    const released = await commitWithFinalStatement(
+      transaction,
+      `WITH deleted AS (
+         DELETE FROM relay_assignment_activity_leases
+         WHERE user_id = ? AND relay_host_id = ? AND activity_id = ?
+         RETURNING request_units
+       ), assignment_updated AS (
+         UPDATE relay_assignments SET ${column} =
+           CASE WHEN ${column} < 1 THEN 0 ELSE ${column} - 1 END,
+           lease_expires_at = CASE WHEN lease_expires_at > ? THEN lease_expires_at ELSE ? END,
+           last_activity_at = ?
+         WHERE user_id = ? AND relay_host_id = ? AND EXISTS (SELECT 1 FROM deleted)
+         RETURNING user_id
+       ), final_write AS (
+       UPDATE relay_cells SET reserved_requests =
+         CASE WHEN reserved_requests + ? < 0 THEN 0 ELSE reserved_requests + ? END,
+         updated_at = ?
+       WHERE cell_id = ? AND EXISTS (SELECT 1 FROM assignment_updated)
+       RETURNING cell_id
+       ) SELECT 1 / (SELECT count(*)::int FROM final_write)`,
+      [
+        identity.userId,
+        identity.relayHostId,
+        activityId,
+        now,
+        now,
+        now,
+        identity.userId,
+        identity.relayHostId,
+        delta,
+        delta,
+        now,
+        cellId
+      ]
+    )
+    if (!released) {await this.refuseCellReservation(transaction, cellId)}
+    return true
   }
 
   async activateControl(

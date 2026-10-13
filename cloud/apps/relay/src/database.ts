@@ -86,6 +86,8 @@ export interface RelayDatabase {
   ): Promise<T>
   // Only on a PostgreSQL transaction handle; see commitWithFinalWrite.
   commitWithFinal?(sql: string, params?: unknown[]): Promise<boolean>
+  // Commits a complete CTE statement whose final SELECT returns one row on success.
+  commitWithFinalStatement?(sql: string, params?: unknown[]): Promise<boolean>
   close(): Promise<void>
 }
 
@@ -98,6 +100,17 @@ export async function commitWithFinalWrite(
   params: unknown[] = []
 ): Promise<boolean> {
   if (database.commitWithFinal) {return await database.commitWithFinal(sql, params)}
+  return (await database.query(sql, params)).length > 0
+}
+
+export async function commitWithFinalStatement(
+  database: RelayDatabase,
+  sql: string,
+  params: unknown[] = []
+): Promise<boolean> {
+  if (database.commitWithFinalStatement) {
+    return await database.commitWithFinalStatement(sql, params)
+  }
   return (await database.query(sql, params)).length > 0
 }
 
@@ -908,6 +921,24 @@ class PostgresTransaction implements RelayDatabase {
       // Simple query stops at the first error, so any server error means COMMIT never ran:
       // retryable codes take the caller's normal rollback-and-retry path. A lost connection
       // leaves the outcome unknown, and nothing retries it.
+      if (String((error as { code?: unknown }).code) !== '22012') {
+        rememberPostgresTransactionPhase(error, sql)
+        throw error
+      }
+      await this.client.query('ROLLBACK')
+      this.state = 'rolled-back'
+      return false
+    }
+    this.state = 'committed'
+    return true
+  }
+
+  async commitWithFinalStatement(sql: string, params: unknown[] = []): Promise<boolean> {
+    this.assertNotCommitted()
+    const message = `${inlinePostgresParameters(sql, params, this.client)}; COMMIT`
+    try {
+      await this.client.query(message)
+    } catch (error) {
       if (String((error as { code?: unknown }).code) !== '22012') {
         rememberPostgresTransactionPhase(error, sql)
         throw error
