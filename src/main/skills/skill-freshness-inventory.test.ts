@@ -96,7 +96,13 @@ async function fixture() {
 beforeEach(() => {
   // Why: provider roots follow these variables; the host's real values would point the
   // scan at the developer's own skill folders.
-  for (const name of ['CLAUDE_CONFIG_DIR', 'GROK_HOME', 'HERMES_HOME', 'XDG_STATE_HOME', 'LOCALAPPDATA']) {
+  for (const name of [
+    'CLAUDE_CONFIG_DIR',
+    'GROK_HOME',
+    'HERMES_HOME',
+    'XDG_STATE_HOME',
+    'LOCALAPPDATA'
+  ]) {
     vi.stubEnv(name, '')
   }
 })

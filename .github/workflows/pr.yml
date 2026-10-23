@@ -1014,7 +1014,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
-      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.224
+      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.237
 
     steps:
       # Keep the full graph for release extraction; a shallow clone omits fixture commits.
@@ -1044,7 +1044,9 @@ jobs:
             refs/tags/v1.4.219:refs/tags/v1.4.219 \
             refs/tags/v1.4.220:refs/tags/v1.4.220 \
             refs/tags/v1.4.221:refs/tags/v1.4.221 \
-            refs/tags/v1.4.222:refs/tags/v1.4.222
+            refs/tags/v1.4.222:refs/tags/v1.4.222 \
+            refs/tags/v1.4.224:refs/tags/v1.4.224 \
+            refs/tags/v1.4.228:refs/tags/v1.4.228
 
       - uses: ./.github/actions/install-node-dependencies
         with:
