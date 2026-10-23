@@ -6,7 +6,8 @@ import {
   codexConfigMayPickModel,
   ompSettingsMayPickModel,
   openCodeAgentFileMayPickModel,
-  openCodeConfigMayPickModel
+  openCodeConfigMayPickModel,
+  piSettingsMayPickModel
 } from './agent-project-model-config-keys'
 
 // A listing's default is the account's, but a chat runs in a workspace whose own
@@ -61,6 +62,8 @@ type ProjectModelLayers = {
   files: readonly ProjectModelFile[]
   /** Folders of `.md` agent definitions whose frontmatter may pick the model. */
   agentFolders?: readonly { path: string; recursive: boolean }[]
+  /** Folders of extension code, which may pick the model however it likes. */
+  codeFolders?: readonly string[]
   /** The agent reads every ancestor of the workspace, not only up to its project root. */
   wholeAncestry?: boolean
 }
@@ -69,6 +72,21 @@ const files = (
   paths: readonly string[],
   mayPickModel: (text: string) => boolean
 ): ProjectModelFile[] => paths.map((path) => ({ path, mayPickModel }))
+
+// OpenCode 2.x discovers `opencode.json(c)` and `.opencode/` in every ancestor of the workspace.
+const OPENCODE_PROJECT_MODEL_LAYERS: ProjectModelLayers = {
+  wholeAncestry: true,
+  files: files(
+    ['opencode.json', 'opencode.jsonc', '.opencode/opencode.json', '.opencode/opencode.jsonc'],
+    openCodeConfigMayPickModel
+  ),
+  agentFolders: [
+    { path: '.opencode/agent', recursive: true },
+    { path: '.opencode/agents', recursive: true },
+    { path: '.opencode/mode', recursive: false },
+    { path: '.opencode/modes', recursive: false }
+  ]
+}
 
 // The project files each agent's CLI reads a model from.
 const PROJECT_MODEL_LAYERS: Readonly<Record<string, ProjectModelLayers>> = {
@@ -79,20 +97,9 @@ const PROJECT_MODEL_LAYERS: Readonly<Record<string, ProjectModelLayers>> = {
       claudeSettingsMayPickModel
     )
   },
-  // OpenCode 2.x discovers `opencode.json(c)` and `.opencode/` in every ancestor of the workspace.
-  opencode: {
-    wholeAncestry: true,
-    files: files(
-      ['opencode.json', 'opencode.jsonc', '.opencode/opencode.json', '.opencode/opencode.jsonc'],
-      openCodeConfigMayPickModel
-    ),
-    agentFolders: [
-      { path: '.opencode/agent', recursive: true },
-      { path: '.opencode/agents', recursive: true },
-      { path: '.opencode/mode', recursive: false },
-      { path: '.opencode/modes', recursive: false }
-    ]
-  },
+  opencode: OPENCODE_PROJECT_MODEL_LAYERS,
+  // The same program under its other command name.
+  opencode2: OPENCODE_PROJECT_MODEL_LAYERS,
   // OMP merges its own `.omp` files and these other agents' project settings into its settings.
   omp: {
     files: [
@@ -111,6 +118,11 @@ const PROJECT_MODEL_LAYERS: Readonly<Record<string, ProjectModelLayers>> = {
       ),
       ...files(['.codex/config.toml'], (text) => ompSettingsMayPickModel(text, 'toml'))
     ]
+  },
+  // Pi reads `.pi/settings.json` in the chat's folder and loads the extensions beside it.
+  pi: {
+    files: files(['.pi/settings.json'], piSettingsMayPickModel),
+    codeFolders: ['.pi/extensions']
   }
 }
 
@@ -155,6 +167,16 @@ async function agentFolderMayPickModel(folder: string, recursive: boolean): Prom
   return found.some(Boolean)
 }
 
+/** A folder holding anything but dotfiles (.DS_Store, .gitkeep) is extension code that may pick
+ *  the model. */
+async function codeFolderMayPickModel(folder: string): Promise<boolean> {
+  try {
+    return (await readdir(folder)).some((name) => !name.startsWith('.'))
+  } catch (error) {
+    return !isMissing(error)
+  }
+}
+
 /** A folder that is the agent's own home is account config, not a layer; any other file or agent
  *  folder setting a model or effort is one. */
 async function directoryMayOverride(
@@ -169,7 +191,10 @@ async function directoryMayOverride(
       .map((file) => fileMayPickModel(join(dir, file.path), file.mayPickModel)),
     ...(layers.agentFolders ?? []).map((folder) =>
       agentFolderMayPickModel(join(dir, folder.path), folder.recursive)
-    )
+    ),
+    ...(layers.codeFolders ?? [])
+      .filter((folder) => dirname(join(dir, folder)) !== home)
+      .map((folder) => codeFolderMayPickModel(join(dir, folder)))
   ])
   return found.some(Boolean)
 }

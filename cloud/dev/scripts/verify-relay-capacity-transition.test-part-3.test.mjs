@@ -39,7 +39,7 @@ test('restart-safe fails on live runtime work or an open migration regardless of
   }
 })
 
-test('unauthenticated redials do not reset the pace window', async () => {
+test('unauthenticated redials do not restart the quiet count', async () => {
   let runtimeReads = 0
   const lines = []
   const result = await verifyCapacityTransition(pacedRestartConfig, {
@@ -179,7 +179,7 @@ test('restart progress prints every counter the gate reads', async () => {
   assert.deepEqual(lines[0], {
     event: 'relay_capacity_transition_restart_progress',
     restartSafeSamples: 0,
-    requiredRestartSafeSamples: 61,
+    paceWindowRemainingMs: 300_000,
     totalConnections: 7,
     preAuthConnections: 1,
     runtimeAvailable: true,

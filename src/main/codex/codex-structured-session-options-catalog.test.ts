@@ -83,7 +83,6 @@ function seedEntry(store: AgentModelCatalogStore, ...ids: string[]): void {
         efforts: [{ value: 'high', label: 'High' }],
         defaultEffort: 'high'
       })),
-      fastModeTierByModel: new Map(),
       origin: 'live-session'
     },
     'discovery'
@@ -336,7 +335,7 @@ describe('first-turn catalog deadline', () => {
       async (
         method: string,
         _params?: Record<string, unknown>,
-        options?: { timeoutMs?: number }
+        options?: { timeoutMs?: number | null }
       ) => {
         timeouts.push(options?.timeoutMs ?? 0)
         if (method === 'model/list') {

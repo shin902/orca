@@ -25,7 +25,7 @@ export const digest = `sha256:${'a'.repeat(64)}`
 export const membershipDigest = (membership) =>
   createHash('sha256').update(JSON.stringify(membership)).digest('hex')
 
-export function harness(initialSelector, runtimeDigests = {}, runtimeRegions = {}) {
+export function harness(initialSelector, runtimeDigests = {}, runtimeRegions = {}, runtimeHardCaps = {}) {
   const initialMembership = structuredClone(initialSelector.membership)
   let selector = structuredClone(initialSelector)
   const intents = new Map()
@@ -36,20 +36,21 @@ export function harness(initialSelector, runtimeDigests = {}, runtimeRegions = {
     const parsed = new URL(url)
     requests.push({ path: parsed.pathname, body })
     if (parsed.pathname === '/v1/admin/runtime-status') {
-      const cell = parsed.hostname.split('.')[0]
+      const [cell, domain] = parsed.hostname.split(/\.(.*)/)
+      const cellId = `${domain.startsWith('relay-staging.') ? 'staging' : 'production'}-gce-${cell}`
       return {
-        cellId: `production-gce-${cell}`,
+        cellId,
         cellUrl: parsed.origin,
-        region: runtimeRegions[`production-gce-${cell}`] ?? 'asia-east2',
-        imageDigest: runtimeDigests[`production-gce-${cell}`] ?? digest,
+        region: runtimeRegions[cellId] ?? 'asia-east2',
+        imageDigest: runtimeDigests[cellId] ?? digest,
         draining: false,
-        connectionCapacity: { hardCap: 3_000, unobservedBound: 60 }
+        connectionCapacity: { hardCap: runtimeHardCaps[cellId] ?? 3_000, unobservedBound: 60 }
       }
     }
     if (parsed.pathname === '/v1/admin/cell-status') {
       return {
         status: {
-          cellUrl: `https://${body.cellId.split('-').at(-1)}.relay.onorca.dev`,
+          cellUrl: `https://${body.cellId.split('-').at(-1)}.${parsed.hostname}`,
           runtime: { heartbeatFresh: true, ready: true }
         }
       }

@@ -28,6 +28,26 @@ import {
 } from './operate-relay-asia-admission.test-support.mjs'
 import { launchCells, admissionArguments } from './operate-relay-asia-admission.test-support.mjs'
 
+test('promotes the registered C35 spare to general and leaves every other cell alone', async () => {
+  const general = [
+    ...launchCells, 'production-gce-c30', 'production-gce-c31', 'production-gce-c32', 'production-gce-c33',
+    'production-gce-c34'
+  ]
+  const membership = {
+    existingOnly: [],
+    migrationOnly: ['production-gce-c17', 'production-gce-c35'],
+    general: [...general]
+  }
+  const subject = harness({ generation: 345, membership })
+  const result = await operateRelayAsiaAdmission({
+    environment: 'production', mode: 'promote', cells: ['production-gce-c35'],
+    expectedGeneration: 345, imageDigest: digest, attemptId: 'asia_promote_c35', token: 'not-logged'
+  }, subject)
+  assert.deepEqual(result.states, { 'production-gce-c35': 'general' })
+  assert.deepEqual(subject.selector().membership.migrationOnly, ['production-gce-c17'])
+  assert.deepEqual(subject.selector().membership.general, [...general, 'production-gce-c35'].sort())
+})
+
 test('promotes the registered C34 spare to general and leaves every other cell alone', async () => {
   const general = [
     ...launchCells, 'production-gce-c30', 'production-gce-c31', 'production-gce-c32', 'production-gce-c33'
@@ -187,7 +207,7 @@ test('runs each later cell\'s own canary with load aimed at that cell\'s region'
   for (const [cellId, region] of [
     ['production-gce-c30', 'asia-east2'], ['production-gce-c31', 'asia-east2'],
     ['production-gce-c32', 'us-central1'], ['production-gce-c33', 'us-central1'],
-    ['production-gce-c34', 'asia-east2']
+    ['production-gce-c34', 'asia-east2'], ['production-gce-c35', 'asia-east2']
   ]) {
     const outputs = promotionOutputs(cellId)
     assert.equal(outputs?.canary, 'true', cellId)
@@ -197,8 +217,9 @@ test('runs each later cell\'s own canary with load aimed at that cell\'s region'
   }
   assert.equal(promotionOutputs('production-gce-c32,production-gce-c33'), null)
   assert.equal(promotionOutputs('production-gce-c33,production-gce-c34'), null)
+  assert.equal(promotionOutputs('production-gce-c34,production-gce-c35'), null)
   const canaryStart = workflowBlock('case "${CANARY_CELL}" in', '\n          esac')
-  for (const cellId of ['production-gce-c32', 'production-gce-c33', 'production-gce-c34']) {
+  for (const cellId of ['production-gce-c32', 'production-gce-c33', 'production-gce-c34', 'production-gce-c35']) {
     const result = spawnSync('bash', ['-euo', 'pipefail', '-c',
       `${canaryStart}\necho "\${verify_cells} \${expected_states}"`], {
       env: { ...process.env, CANARY_CELL: cellId }, encoding: 'utf8'
@@ -207,4 +228,60 @@ test('runs each later cell\'s own canary with load aimed at that cell\'s region'
   }
   assert.match(admissionWorkflow, /--preferred-region "\$\{CANARY_REGION\}"/)
   assert.match(admissionWorkflow, /CANARY_REGION: \$\{\{ steps\.inputs\.outputs\.canary_region \}\}/)
+})
+
+const stagingDeadCellWave = ['staging-gce-c5', 'staging-gce-c6', 'staging-gce-c7']
+const stagingUsShape = Object.fromEntries(stagingDeadCellWave.map((cellId) => [cellId, 'us-central1']))
+const stagingUsCaps = Object.fromEntries(stagingDeadCellWave.map((cellId) => [cellId, 600]))
+
+test('registers the staging dead-cell wave at its own US shape', async () => {
+  const subject = harness({
+    generation: 43,
+    membership: { existingOnly: ['staging-gce-c3'], migrationOnly: [], general: ['staging-gce-c1', 'staging-gce-c2', 'staging-gce-c4'] }
+  }, {}, stagingUsShape, stagingUsCaps)
+  const result = await operateRelayAsiaAdmission({
+    environment: 'staging', mode: 'register', cells: stagingDeadCellWave,
+    expectedGeneration: 43, imageDigest: digest, attemptId: 'staging_c5_c7_register', token: 'not-logged'
+  }, subject)
+  const request = subject.requests.find(({ path }) => path.endsWith('/add-migration-cells'))
+  assert.deepEqual(request.body.cells.map((cell) => cell.cellUrl), [
+    'https://c5.relay-staging.onorca.dev', 'https://c6.relay-staging.onorca.dev', 'https://c7.relay-staging.onorca.dev'
+  ])
+  assert.ok(request.body.cells.every((cell) =>
+    cell.region === 'us-central1' && cell.capacityRequests === 4_000 &&
+    cell.connectionHardCap === 600 && cell.connectionUnobservedBound === 60
+  ))
+  assert.deepEqual(new Set(Object.values(result.states)), new Set(['migration-only']))
+})
+
+test('promotes the staging dead-cell wave through the general route, not the C4 proof route', async () => {
+  const subject = harness({
+    generation: 44,
+    membership: {
+      existingOnly: ['staging-gce-c3'],
+      migrationOnly: [...stagingDeadCellWave],
+      general: ['staging-gce-c1', 'staging-gce-c2', 'staging-gce-c4']
+    }
+  }, {}, stagingUsShape, stagingUsCaps)
+  const result = await operateRelayAsiaAdmission({
+    environment: 'staging', mode: 'promote', cells: stagingDeadCellWave,
+    expectedGeneration: 44, imageDigest: digest, attemptId: 'staging_c5_c7_promote', token: 'not-logged'
+  }, subject)
+  assert.ok(subject.requests.some(({ path }) => path === '/v1/admin/admission-selector/apply'))
+  assert.ok(!subject.requests.some(({ path }) => path.endsWith('/apply-staging-asia-proof')))
+  assert.deepEqual(new Set(Object.values(result.states)), new Set(['general']))
+  assert.deepEqual(subject.selector().membership.general, [
+    'staging-gce-c1', 'staging-gce-c2', 'staging-gce-c4', ...stagingDeadCellWave
+  ])
+})
+
+test('refuses a staging wave that was not reviewed', () => {
+  assert.throws(() => parseRelayAsiaAdmissionArguments([
+    '--environment', 'staging', '--mode', 'promote', '--cell-ids', 'staging-gce-c4,staging-gce-c5',
+    '--expected-generation', '44', '--attempt-id', 'staging_mixed_wave', '--image-digest', digest
+  ]), /reviewed admission wave/)
+  assert.throws(() => parseRelayAsiaAdmissionArguments([
+    '--environment', 'staging', '--mode', 'register', '--cell-ids', 'staging-gce-c8',
+    '--expected-generation', '44', '--attempt-id', 'staging_unknown', '--image-digest', digest
+  ]), /cell-ids are invalid/)
 })

@@ -147,8 +147,8 @@ export const pacedRestartConfig = {
   timeoutMs: 1_200_000
 }
 
-export function fakeClock() {
-  let now = 0
+export function fakeClock(start = 0) {
+  let now = start
   return {
     now: () => now,
     wait: async (milliseconds) => {
