@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: true
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
+  # The fork base predates these checks; compare against the imported release.
+  ORCA_PREFLIGHT_BASELINE_REF: 071747853f5995ee233b36751613f09a60007c2b
 jobs:
   compare:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
@@ -27,6 +29,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
+      - name: Fetch official comparison baseline
+        run: git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_PREFLIGHT_BASELINE_REF"
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node
@@ -34,6 +38,8 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: config/.bun-version
+      - uses: ./.github/actions/build-mobile-web-bundle
+        if: matrix.comparison == 'smoke'
       - name: Compare checks and verify their results
         run: node config/scripts/benchmark-ci-preflight-critical-path.mjs ${{ matrix.comparison }}
       - uses: actions/upload-artifact@v7

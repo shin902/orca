@@ -43,6 +43,7 @@ const ACTIVITY_LEASE_READERS: Record<string, string> = {
   'registered-migration-abandonment.ts:ABANDONED_REGISTERED_MIGRATION': 'open-flow-only',
   // One host's rows under lock; each caller is classified in the reserve-mode census.
   'assignment-store.ts:lockAssignmentActivities': 'host-lock',
+  'assignment-store.ts:releaseActivityPostgres': 'host-lock',
   // Metrics and previews: they report, and act on nothing.
   'assignment-inventory-snapshot.ts:readAssignmentInventorySnapshot': 'report-only',
   'region-correction-preview.ts:previewRegionalRehomeEligibility': 'report-only',

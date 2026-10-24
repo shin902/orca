@@ -52,6 +52,37 @@ it('allows one decimal unit of native P3 rounding and its asset reference hashes
   expect(compareJavascriptParityFiles(before, after)).toEqual([])
 })
 
+it('compares the browser file inventory after hash normalization without hiding membership changes', () => {
+  const before = inventory({
+    'renderer/assets/App-AAAAAAAA.css': '.a{color:red}',
+    'renderer/assets/App-ZZZZZZZZ.js': 'run()',
+    'renderer/.orca-web-client-files.json': JSON.stringify([
+      'assets/App-AAAAAAAA.css',
+      'assets/App-ZZZZZZZZ.js'
+    ])
+  })
+  const candidate = (files) =>
+    inventory({
+      'renderer/assets/App-BBBBBBBB.js': 'run()',
+      'renderer/assets/App-CCCCCCCC.css': '.a{color:red}',
+      'renderer/.orca-web-client-files.json': JSON.stringify(files)
+    })
+  expect(
+    compareJavascriptParityFiles(
+      before,
+      candidate(['assets/App-BBBBBBBB.js', 'assets/App-CCCCCCCC.css'])
+    )
+  ).toEqual([])
+  for (const files of [
+    ['assets/App-BBBBBBBB.js'],
+    ['assets/App-BBBBBBBB.js', 'assets/App-BBBBBBBB.js', 'assets/App-CCCCCCCC.css']
+  ]) {
+    expect(compareJavascriptParityFiles(before, candidate(files))).toEqual([
+      'renderer/.orca-web-client-files.json'
+    ])
+  }
+})
+
 it('rejects meaningful color changes and every non-color stylesheet change', () => {
   expect(
     equivalentStylesheets(

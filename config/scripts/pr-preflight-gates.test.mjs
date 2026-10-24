@@ -16,7 +16,9 @@ it('shares one setup and overlaps the compiler only after type-aware checks fini
   expect(workflow.jobs.static_analysis).toBeUndefined()
   expect(workflow.jobs.typecheck).toBeUndefined()
   expect(preflight.needs).toEqual(['code_paths'])
-  expect(preflight['runs-on']).toBe('blacksmith-8vcpu-ubuntu-2404')
+  expect(preflight['runs-on']).toBe(
+    "${{ github.repository == 'stablyai/orca' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-24.04-arm' }}"
+  )
   const installs = steps.filter(
     (step) => step.uses === './.github/actions/install-node-dependencies'
   )

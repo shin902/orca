@@ -105,6 +105,7 @@ async function suite(arm, state, pair, comparison) {
       ...(await Promise.all(
         batch.map(async ({ config }) => {
           const [program, args] = invocation(config, arm)
+          console.log(JSON.stringify({ comparison, pair, arm, state, config, phase: 'start' }))
           return {
             config,
             ...(await command(

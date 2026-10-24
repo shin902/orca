@@ -65,11 +65,16 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
+    env:
+      # The fork base has no compatibility-import check to benchmark.
+      ORCA_COMPAT_BASELINE_REF: 071747853f5995ee233b36751613f09a60007c2b
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 2
+      - name: Fetch official comparison baseline
+        run: git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_COMPAT_BASELINE_REF"
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: none

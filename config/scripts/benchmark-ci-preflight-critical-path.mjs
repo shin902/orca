@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { availableParallelism, totalmem } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,9 +15,11 @@ const root = fileURLToPath(new URL('../..', import.meta.url))
 const output = path.join(root, '.build/preflight-benchmark')
 mkdirSync(output, { recursive: true })
 const env = { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+const baselineRef = process.env.ORCA_PREFLIGHT_BASELINE_REF ?? 'HEAD^1'
 const report = {
   sourceSha: process.env.GITHUB_SHA ?? null,
   comparison,
+  baselineRef,
   host: {
     platform: process.platform,
     arch: process.arch,
@@ -26,7 +28,7 @@ const report = {
     cores: availableParallelism()
   },
   method:
-    'Four counterbalanced pairs on one checkout; baseline comes from its first parent. Smoke clears build output each run; native and download caches are warmed for both arms.',
+    'Four counterbalanced pairs on one checkout; baseline is the explicit ref or first parent. Smoke clears build output except the shared mobile-web prerequisite each run; native and download caches are warmed for both arms.',
   measurements: []
 }
 const save = () =>
@@ -36,7 +38,11 @@ const save = () =>
   )
 
 function baselineSource(file) {
-  const result = runProcessSync({ program: 'git', args: ['show', `HEAD^1:${file}`], cwd: root })
+  const result = runProcessSync({
+    program: 'git',
+    args: ['show', `${baselineRef}:${file}`],
+    cwd: root
+  })
   if (result.code !== 0 || result.outputTruncated) {
     throw new Error(`Cannot read baseline ${file}`)
   }
@@ -124,7 +130,11 @@ for (const [program, args] of ${JSON.stringify(steps)}) {
     for (const arm of order) {
       let result
       if (comparison === 'smoke') {
-        rmSync(path.join(root, 'out'), { recursive: true, force: true })
+        for (const entry of readdirSync(path.join(root, 'out'))) {
+          if (entry !== 'mobile-web') {
+            rmSync(path.join(root, 'out', entry), { recursive: true, force: true })
+          }
+        }
         result =
           arm === 'baseline'
             ? await command(process.execPath, [runnerFile], `smoke-${pair}-${arm}`)
