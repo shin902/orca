@@ -573,7 +573,7 @@ test('a runtime that empties as the pace window ends passes after two quiet samp
   const lines = []
   await verifyCapacityTransition(pacedRestartConfig, {
     fetch: async (url, options) => {
-      if (new URL(url).pathname === '/v1/admin/runtime-status') runtimeReads += 1
+      if (new URL(url).pathname === '/v1/admin/runtime-status') {runtimeReads += 1}
       return await harness({ ...strandedCell, controls: runtimeReads <= 60 ? 1 : 0 })(url, options)
     },
     token: 'masked-token',

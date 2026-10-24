@@ -330,7 +330,14 @@ jobs:
 
       - name: Enforce React Doctor on changed lines
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: node config/scripts/check-react-doctor-changed.mjs "${{ github.event.pull_request.base.sha }}"
+        env:
+          # Review the fork delta, not unchanged code imported from the stable release.
+          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && '071747853f5995ee233b36751613f09a60007c2b' || '' }}
+        run: |
+          if [ -n "$ORCA_REACT_DOCTOR_BASE" ]; then
+            git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_REACT_DOCTOR_BASE"
+          fi
+          node config/scripts/check-react-doctor-changed.mjs "${{ github.event.pull_request.base.sha }}"
 
       - wait: changed-code-quality
 

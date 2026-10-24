@@ -6,7 +6,8 @@ const requestedBase =
   process.argv.slice(2).find((argument) => argument !== '--') ??
   process.env.ORCA_CODE_QUALITY_BASE ??
   'origin/main'
-const base = resolvePullRequestDiffBase(process.cwd(), requestedBase)
+const base =
+  process.env.ORCA_REACT_DOCTOR_BASE || resolvePullRequestDiffBase(process.cwd(), requestedBase)
 // Accept revision syntax, never shell fragments or option injection.
 const GIT_REVISION = /^(?!-)[A-Za-z0-9._/@^~-]+$/
 if (!GIT_REVISION.test(base)) {
