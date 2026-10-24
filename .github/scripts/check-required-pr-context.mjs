@@ -14,7 +14,9 @@ export function verifyRequiredPrContext(parseYaml) {
     })
   const owners = providers.map((provider) => provider.owner)
   if (providers.length !== 1 || owners[0] !== 'pr.yml:verify') {
-    throw new Error(`Required PR context must belong only to pr.yml:verify; found ${owners}`)
+    throw new Error(
+      `Required PR context must belong only to pr.yml:verify; found ${owners.join(',')}`
+    )
   }
   const gate = providers[0].job
   const condition = gate.if?.replace(/^\$\{\{\s*|\s*\}\}$/g, '').trim()

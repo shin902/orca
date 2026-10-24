@@ -34,7 +34,7 @@ const report = {
   },
   method: parityOnly
     ? 'Diagnostic probes and normalized file-list parity for every registered project; no timing comparison.'
-    : 'Four counterbalanced pairs per comparison. Cold removes build state, not filesystem caches. Warm immediately follows its cold run. Same commit and project registry for every arm.',
+    : 'Four counterbalanced pairs per comparison. Native projects run serially to fit the runner memory. Cold removes build state, not filesystem caches. Warm immediately follows its cold run. Same commit and project registry for every arm.',
   measurements: [],
   comparisons: {},
   parity: []
@@ -61,7 +61,8 @@ report.host.typescript = JSON.parse(
 ).version
 const nativeBatches = planTypecheckBatches(TYPECHECK_PROJECTS, {
   budgetGib: Math.min(12, admissibleHeapGib(totalmem())),
-  parallelism: Math.min(4, availableParallelism())
+  // The native Node project alone peaked above 14 GiB on the 16 GiB runner.
+  parallelism: 1
 })
 function invocation(config, arm, extra = []) {
   return arm === 'native'
