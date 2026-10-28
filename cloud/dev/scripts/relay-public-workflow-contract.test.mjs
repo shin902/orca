@@ -40,6 +40,8 @@ test('the copy carries every relay workflow', () => {
     'cloud-operate-relay-production-cell-flags.yml',
     'cloud-operate-relay-production-rehome-job.yml',
     'cloud-operate-relay-production-rehome.yml',
+    'cloud-operate-relay-production-reserve-watch.yml',
+    'cloud-operate-relay-staging-cell-flags.yml',
     'cloud-power-relay-staging.yml',
     'cloud-prove-relay-asia-staging.yml',
     'cloud-prove-relay-staging-capacity.yml',

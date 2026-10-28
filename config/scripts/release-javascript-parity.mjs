@@ -93,6 +93,9 @@ export function annotateJavascriptParityFiles(root, files) {
     const manifest = file.path === 'renderer/.vite/manifest.json'
     if (manifest) {
       content = JSON.stringify(normalizeManifestSourcePaths(JSON.parse(content)))
+    } else if (file.path === 'renderer/.orca-web-client-files.json') {
+      // Hash changes can reorder this sorted file inventory without changing its members.
+      content = JSON.stringify(JSON.parse(content).sort())
     }
     return {
       ...file,

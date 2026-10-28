@@ -111,6 +111,7 @@ export function productionLikeEntries() {
     ...metricSamples({ cellId: 'production-gce-c30', from: '2026-09-20T20:20:00Z', count: 20 }),
     ...metricSamples({ cellId: 'production-gce-c31', from: '2026-09-20T20:20:00Z', count: 20 }),
     ...metricSamples({ cellId: 'production-gce-c34', from: '2026-09-20T20:20:00Z', count: 20 }),
+    ...metricSamples({ cellId: 'production-gce-c35', from: '2026-09-20T20:20:00Z', count: 20 }),
     // One director instance's samples from ten minutes before the drain to the window's end.
     ...directorSamples({ from: '2026-09-20T19:50:00Z', count: 80, payload: {} })
   ]

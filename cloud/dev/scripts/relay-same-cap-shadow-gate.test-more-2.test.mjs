@@ -51,10 +51,10 @@ test('the verdict is the worst check, and an unverified read never reads as PASS
 })
 
 // The step that owns each stamp, so a stamp's presence is judged where it has to be written.
-test('reads every promoted asia-east2 cell as fleet pool, C34 included', () => {
+test('reads every promoted asia-east2 cell as fleet pool, C35 included', () => {
   assert.deepEqual(FLEET_POOL_CELL_IDS, [
     'production-gce-c27', 'production-gce-c28', 'production-gce-c29', 'production-gce-c30',
-    'production-gce-c31', 'production-gce-c34'
+    'production-gce-c31', 'production-gce-c34', 'production-gce-c35'
   ])
 })
 
@@ -76,6 +76,7 @@ test('a healthy roll reads as PASS and names the instance it proved serving', as
     'fleetPool:production-gce-c30',
     'fleetPool:production-gce-c31',
     'fleetPool:production-gce-c34',
+    'fleetPool:production-gce-c35',
     'nonDrain503Budget'
   ])
   assert.deepEqual(report.drain, {
