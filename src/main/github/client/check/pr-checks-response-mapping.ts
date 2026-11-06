@@ -1,3 +1,4 @@
+import { normalizePRCheckHeadSha } from '../../../../shared/github/pr-check-head'
 import type { PRCheckDetail } from '../../../../shared/github/check-types'
 import { githubRepositoryWebHost, type GitHubApiRepository } from '../../github-api-repository'
 import {
@@ -100,11 +101,17 @@ export function mapGraphQLPendingApprovalCheckSuite(
     name: getPendingApprovalCheckSuiteName(suite, headSha, index),
     status: 'completed',
     conclusion: 'action_required',
-    // Why: suite-only approval blockers have no check run; link the suite page when GraphQL exposes one.
+    // Approval blockers may have a suite URL without any check run.
     url:
       nullableString(suite.url) ??
       (headSha ? getPendingApprovalCheckSuiteUrl(ownerRepo, headSha, suite.databaseId) : null)
   }
+}
+
+export function isPendingApprovalSuiteWithoutRuns(conclusion: unknown, hasRuns: boolean): boolean {
+  return (
+    typeof conclusion === 'string' && conclusion.toLowerCase() === 'action_required' && !hasRuns
+  )
 }
 
 export function mapGraphQLPRChecksResponse(
@@ -131,22 +138,34 @@ export function mapGraphQLPRChecksResponse(
       .map((context) => nullableNumber(context.checkSuite?.databaseId))
       .filter((id): id is number => id !== null)
   )
-  // Why: mixed-CI repos expose Jenkins/Prow/Tide as legacy status contexts in the same rollup; keep check-run metadata on name collisions.
+  // Include legacy statuses, but preserve richer check-run metadata on name collisions.
   const legacyStatuses = contexts
     .filter(isGraphQLStatusContext)
     .map(mapGraphQLStatusContext)
     .filter((check): check is PRCheckDetail => check !== null && !checkRunNames.has(check.name))
   const pendingApprovalChecks = (commit.checkSuites?.nodes ?? [])
-    .filter((suite) => suite.conclusion?.toLowerCase() === 'action_required')
     .filter((suite) => {
       const suiteId = nullableNumber(suite.databaseId)
-      return suiteId === null || !checkSuiteIdsWithRuns.has(suiteId)
+      return isPendingApprovalSuiteWithoutRuns(
+        suite.conclusion,
+        suiteId !== null && checkSuiteIdsWithRuns.has(suiteId)
+      )
     })
     .map((suite, index) =>
       mapGraphQLPendingApprovalCheckSuite(ownerRepo, suite, pullRequest.headRefOid, index)
     )
 
-  return [...checkRuns, ...legacyStatuses, ...pendingApprovalChecks]
+  const observedHeadSha = normalizePRCheckHeadSha(commit.oid)
+  const provedHead =
+    observedHeadSha &&
+    observedHeadSha === normalizePRCheckHeadSha(pullRequest.headRefOid) &&
+    (response.errors === undefined ||
+      (Array.isArray(response.errors) && response.errors.length === 0))
+      ? observedHeadSha
+      : undefined
+  return [...checkRuns, ...legacyStatuses, ...pendingApprovalChecks].map((check) =>
+    provedHead ? { ...check, observedHeadSha: provedHead } : check
+  )
 }
 
 export function getPendingApprovalCheckSuiteName(

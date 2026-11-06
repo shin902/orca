@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
-import type { deriveNativeChatRowContent } from '../../../../shared/native-chat-row-content'
+import type { NativeChatMessage } from '../../../../shared/native-chat/native-chat-types'
+import type { deriveNativeChatRowContent } from '../../../../shared/native-chat/transcript/native-chat-row-content'
 import type { MessageRowProps } from './NativeChatMessageRow'
 import { NativeChatPacedMarkdown } from './NativeChatPacedMarkdown'
 import { NATIVE_CHAT_QUOTE_SOURCE_PROPS } from './native-chat-quote-selection'
@@ -40,8 +40,6 @@ export function NativeChatAssistantMessageRow({
     activeTurnIsWorking,
     trailingRun,
     continuesTurn = false,
-    onLinkClick,
-    allowFileUriLinks = false,
     inSubagentSection = false,
     runtimeContext
   } = props
@@ -50,8 +48,7 @@ export function NativeChatAssistantMessageRow({
   const isSystem = message.role === 'system'
   // A thought heading a run reads inside it, so the row has no words of its own.
   const words = message.role === 'reasoning' ? '' : markdown
-  // Assistant controls reveal on hover and keyboard focus; system asides stay chrome-free.
-  // A working turn's last row is only its frontier: more can still land under it.
+  // Hide controls on system asides and the still-working frontier, where more content may arrive.
   const showControls =
     !isSystem && words.length > 0 && !continuesTurn && activeTurnIsWorking !== true
 
@@ -78,13 +75,10 @@ export function NativeChatAssistantMessageRow({
           variant="document"
           className="text-sm"
           renderCodeBlock={isSystem ? NativeChatPlainCodeBlock : NativeChatCodeBlock}
-          onLinkClick={onLinkClick}
-          allowFileUriLinks={allowFileUriLinks}
-          linkifyFilePaths={onLinkClick !== undefined}
+          linkifyFilePaths
           {...(isSystem ? {} : NATIVE_CHAT_QUOTE_SOURCE_PROPS)}
           visualMessageId={message.role === 'assistant' ? message.id : undefined}
-          // Structured text streams in place with no per-row state: only the live turn's frontier
-          // row, still ending in prose, can be mid-sentence.
+          // Only the live turn’s prose frontier can be mid-sentence; structured rows have no per-row streaming flag.
           streaming={messageIsStreaming(message, activeTurnIsWorking, trailingRun)}
         />
       ) : null}
@@ -124,7 +118,6 @@ function toolRunProps(
     previousUpdatePlan: props.previousUpdatePlan,
     revealedDiff: run ? run.revealedDiff : props.revealedDiff,
     onRevealDiff: props.onScrollMessageToTop,
-    onLinkClick: props.onLinkClick,
     subagentGroups: content.subagentGroups,
     subagentRoster: props.subagentRoster,
     subagentDisclosure: props.subagentDisclosure,
@@ -134,6 +127,7 @@ function toolRunProps(
     activeTurnIsWorking: props.activeTurnIsWorking,
     trailing: props.trailingRun,
     disclosureId: props.message.id,
-    asides: run?.asides
+    asides: run?.asides,
+    runtimeContext: props.runtimeContext
   }
 }

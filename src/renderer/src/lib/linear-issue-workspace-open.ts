@@ -6,25 +6,22 @@ import {
   activateAndRevealFolderWorkspace,
   activateAndRevealWorktree
 } from '@/lib/worktree-activation'
-import { folderWorkspaceToWorktree } from '../../../shared/folder-workspace-worktree'
+import { folderWorkspaceToWorktree } from '../../../shared/folder-workspaces/folder-workspace-worktree'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   findLinearIssueWorkspaceAttachment,
   type LinearIssueAttachmentRef
 } from '@/lib/linear-issue-workspace-attachment'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
-/**
- * Opens the workspace already attached to a Linear issue, or starts a new one.
- * Re-reads worktrees from the store so a workspace created since the last render
- * is still honoured instead of starting a duplicate.
- */
+/** Re-read current workspace attachments at action time so newly created issue workspaces are reused instead of duplicated. */
 export function openLinearIssueWorkspaceOrStart(
   issue: LinearIssueAttachmentRef,
   startWorkspace: () => void
 ): 'opened' | 'started' | 'failed' {
   const state = useAppStore.getState()
   const attached = findLinearIssueWorkspaceAttachment(
-    [...state.allWorktrees(), ...state.folderWorkspaces.map(folderWorkspaceToWorktree)],
+    [...state.allWorktrees(), ...selectFolderWorkspaces(state).map(folderWorkspaceToWorktree)],
     issue
   )
   if (!attached) {

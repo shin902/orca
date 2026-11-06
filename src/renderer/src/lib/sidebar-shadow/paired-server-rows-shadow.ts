@@ -2,16 +2,17 @@ import type { AppState } from '@/store'
 import { getAllWorktreesFromState, getRepoMapFromState } from '@/store/selectors'
 import { projectResolvedWorktreeLineage } from '../../../../shared/resolved-worktree-lineage'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
-import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
+import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspaces/folder-workspace-worktree'
 import {
   pairedServerRowOfWorktree,
   type PairedServerHostFacts,
   type PairedServerWorkspaceRow
 } from '../../../../shared/sidebar-list/paired-server-rows'
-import { describePairedServerHosts } from '../../../../shared/paired-server-hosts'
+import { describePairedServerHosts } from '../../../../shared/remote-runtime/host-catalog/paired-server-hosts'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 /** The paired-server rows the window fetched itself, keyed by host-qualified id, for these hosts. */
 export function readWindowPairedServerRows(
@@ -48,7 +49,7 @@ export function readWindowPairedServerRows(
   for (const worktree of getAllWorktreesFromState(state)) {
     add(worktree, 'git')
   }
-  for (const folder of state.folderWorkspaces ?? []) {
+  for (const folder of selectFolderWorkspaces(state) ?? []) {
     add(folderWorkspaceToWorktree(folder), 'folder')
   }
   return rows

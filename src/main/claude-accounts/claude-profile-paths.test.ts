@@ -5,12 +5,18 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync
 } from 'node:fs'
+import type * as NodeFs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ app: { getPath: () => '/unused-test-path' } }))
+vi.mock('node:fs', async (original) => {
+  const fs = await original<typeof NodeFs>()
+  return { ...fs, unlinkSync: vi.fn(fs.unlinkSync) }
+})
 import {
   describeClaudeProfile,
   prepareClaudeProfileDirectory,
@@ -19,7 +25,6 @@ import {
   readUserClaudeConfigDirAsSet
 } from './claude-profile-paths'
 
-// Case-only aliases exist only on a case-insensitive filesystem (default APFS, NTFS).
 const caseInsensitive = (() => {
   const dir = mkdtempSync(join(tmpdir(), 'claude-case-probe-'))
   try {
@@ -36,6 +41,7 @@ function root(): string {
   return dir
 }
 afterEach(() => {
+  vi.mocked(unlinkSync).mockReset()
   for (const dir of roots.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -43,6 +49,44 @@ afterEach(() => {
 const local = { runtime: 'host', executionHostId: 'local' } as const
 
 describe('Claude profile namespace', () => {
+  it.skipIf(process.platform === 'win32')(
+    'accepts a WSL casing alias while retaining the original marker and rejecting other owners',
+    () => {
+      const dir = root()
+      const userHome = root()
+      const profile = describeClaudeProfile(dir, 'a', {
+        ...local,
+        runtime: 'wsl',
+        distro: 'Ubuntu'
+      })
+      prepareClaudeProfileDirectory(dir, profile, userHome)()
+      const marker = join(dir, 'claude-profiles/a/profile.json')
+      const original = readFileSync(marker, 'utf8')
+      prepareClaudeProfileDirectory(
+        dir,
+        { ...profile, target: { ...profile.target, runtime: 'wsl', distro: 'ubuntu' } },
+        userHome
+      )()
+      expect(readFileSync(marker, 'utf8')).toBe(original)
+      for (const distro of ['Debian', 'Ubuntu-24.04']) {
+        expect(() =>
+          prepareClaudeProfileDirectory(
+            dir,
+            { ...profile, target: { ...local, runtime: 'wsl', distro } },
+            userHome
+          )
+        ).toThrow('another account or target')
+      }
+      writeFileSync(
+        marker,
+        JSON.stringify({ version: 1, accountId: 'b', runtime: 'wsl', distro: 'ubuntu' })
+      )
+      expect(() => prepareClaudeProfileDirectory(dir, profile, userHome)).toThrow(
+        'another account or target'
+      )
+    }
+  )
+
   // A WSL profile's data root is a POSIX path; a Windows temp dir cannot be one.
   it.skipIf(process.platform === 'win32')(
     'binds the new namespace to an account and execution target without touching legacy auth',
@@ -67,7 +111,7 @@ describe('Claude profile namespace', () => {
         runtime: 'wsl',
         distro: 'Ubuntu'
       })
-      // The host id is the caller's view of the host, so another caller's spelling is the same profile.
+      // Caller-relative host IDs must not affect profile ownership.
       prepareClaudeProfileDirectory(
         dir,
         { ...profile, target: { distro: 'Ubuntu', runtime: 'wsl', executionHostId: 'local' } },
@@ -80,7 +124,6 @@ describe('Claude profile namespace', () => {
           userHome
         )
       ).toThrow()
-      // One spelling everywhere: Claude names the profile's Keychain entry from the exact text.
       expect(describeClaudeProfile(`${dir}/./x/../`, 'account-a', target).home).toBe(profile.home)
       expect(() => describeClaudeProfile(dir, '../escape', target)).toThrow()
       expect(() => describeClaudeProfile('C:\\orca', 'a', target)).toThrow()
@@ -99,6 +142,8 @@ describe('Claude profile namespace', () => {
       expect(() =>
         prepareClaudeProfileDirectory(dir, describeClaudeProfile(dir, 'a', local), userHome)
       ).toThrow('another account')
+      expect(readFileSync(marker, 'utf8')).toBe(JSON.stringify(other))
+      expect(existsSync(join(dir, 'claude-profiles/a/home'))).toBe(false)
     }
     writeFileSync(marker, '{')
     expect(() =>
@@ -107,6 +152,46 @@ describe('Claude profile namespace', () => {
     expect(existsSync(join(dir, 'claude-profiles/a/home'))).toBe(false)
     expect(readFileSync(marker, 'utf8')).toBe('{')
   })
+  it('does not recreate a home if its completion marker cannot be invalidated', () => {
+    const dir = root()
+    const userHome = root()
+    const profile = describeClaudeProfile(dir, 'a', local)
+    prepareClaudeProfileDirectory(dir, profile, userHome)()
+    const marker = join(dir, 'claude-profiles/a/profile.json')
+    const original = readFileSync(marker, 'utf8')
+    rmSync(profile.home, { recursive: true })
+    vi.mocked(unlinkSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('busy'), { code: 'EBUSY' })
+    })
+    expect(() => prepareClaudeProfileDirectory(dir, profile, userHome)).toThrow()
+    expect(existsSync(profile.home)).toBe(false)
+    expect(readFileSync(marker, 'utf8')).toBe(original)
+  })
+  it.each(['file', 'link'] as const)(
+    'preserves a %s occupying home and its completion marker',
+    (kind) => {
+      const dir = root()
+      const userHome = root()
+      const profile = describeClaudeProfile(dir, 'a', local)
+      prepareClaudeProfileDirectory(dir, profile, userHome)()
+      const marker = join(dir, 'claude-profiles/a/profile.json')
+      const original = readFileSync(marker, 'utf8')
+      rmSync(profile.home, { recursive: true })
+      const outside = root()
+      writeFileSync(join(outside, 'keep'), 'personal data')
+      if (kind === 'file') {
+        writeFileSync(profile.home, 'personal data')
+      } else {
+        symlinkSync(outside, profile.home, 'junction')
+      }
+      expect(() => prepareClaudeProfileDirectory(dir, profile, userHome)).toThrow()
+      expect(readFileSync(marker, 'utf8')).toBe(original)
+      expect(
+        readFileSync(kind === 'file' ? profile.home : join(profile.home, 'keep'), 'utf8')
+      ).toBe('personal data')
+      expect(readFileSync(join(outside, 'keep'), 'utf8')).toBe('personal data')
+    }
+  )
   it('rejects a linked account parent before creating a profile outside the namespace', () => {
     const dir = root()
     mkdirSync(join(dir, 'claude-profiles'))
@@ -180,7 +265,6 @@ describe('Claude profile namespace', () => {
       writeFileSync(file, value)
       expect(readClaudeProfileObject(file).kind).toBe('unavailable')
     }
-    // ENOTDIR is a definitive absence, as everywhere else in Orca.
     expect(readClaudeProfileObject(join(file, 'child')).kind).toBe('absent')
     mkdirSync(join(file, '..', 'dir.json'))
     expect(readClaudeProfileObject(join(file, '..', 'dir.json')).kind).toBe('unavailable')

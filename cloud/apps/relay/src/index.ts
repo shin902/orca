@@ -1,41 +1,44 @@
+import type { Socket } from 'node:net'
 import {
   formatAssignmentInventorySnapshot,
   readAssignmentInventorySnapshot
-} from './assignment-inventory-snapshot.js'
-import { readRegionCorrectionOutcomes } from './region-correction-outcomes.js'
-import { RelayAssignmentStore } from './assignment-store.js'
+} from './assignment/assignment-inventory-snapshot.js'
+import { readRegionCorrectionOutcomes } from './assignment/regional-rehome/region-correction-outcomes.js'
+import { RelayAssignmentStore } from './assignment/assignment-store.js'
 import { loadRelayConfig } from './config.js'
-import { startCellHeartbeat } from './cell-heartbeat-client.js'
+import { startCellHeartbeat } from './cell/cell-heartbeat-client.js'
 import {
   CELL_FLAG_DEFAULTS,
   CELL_FLAGS_APPLIED_EVENT,
   type CellFlags,
   cellFlagObjectName,
   cellFlagParser
-} from './cell-flags.js'
-import { startControlFlagChannel } from './relay-control-flag-channel.js'
+} from './cell/control-flags/cell-flags.js'
+import { startControlFlagChannel } from './cell/control-flags/relay-control-flag-channel.js'
+import { readCloudRunInstanceZone } from './process-lifecycle/cloud-run-instance-zone.js'
+import { readSandboxTcpCounters } from './observability/sandbox-tcp-counters.js'
 import {
   reconcileCellAdmissionAtStartup,
   roleOwnsAssignmentMaintenance
-} from './cell-admission-startup.js'
-import { openRelayDatabaseAtBoot } from './boot-database-open.js'
+} from './cell/admission/cell-admission-startup.js'
+import { openRelayDatabaseAtBoot } from './database/boot-database-open.js'
 import {
   consumeRelayCellInventoryHold,
   consumeRelayDatabasePoolPressure,
   readRelayDatabasePoolPressure
-} from './database.js'
-import { runAssignmentCleanup } from './assignment-cleanup-steps.js'
-import { runRelayBackgroundOperation } from './relay-background-operation.js'
-import { readPostgresLockWaitSample } from './postgres-lock-wait-sample.js'
-import { jitteredSweepIntervalMs } from './relay-sweep-schedule.js'
-import { observedRelayRequests } from './relay-observability.js'
-import { handleRelayUnhandledRejection } from './relay-database-rejection-fence.js'
-import { startRegionalRehomeWorker } from './regional-rehome-worker.js'
+} from './database/database.js'
+import { runAssignmentCleanup } from './assignment/assignment-cleanup-steps.js'
+import { runRelayBackgroundOperation } from './process-lifecycle/relay-background-operation.js'
+import { readPostgresLockWaitSample } from './database/postgres-lock-wait-sample.js'
+import { jitteredSweepIntervalMs } from './process-lifecycle/relay-sweep-schedule.js'
+import { observedRelayRequests } from './observability/relay-observability.js'
+import { handleRelayUnhandledRejection } from './database/relay-database-rejection-fence.js'
+import { startRegionalRehomeWorker } from './assignment/regional-rehome/regional-rehome-worker.js'
 import { createRelayServer } from './relay-server.js'
 import {
   formatRegisteredMigrationInventory,
   readRegisteredMigrationInventory
-} from './registered-migration-inventory.js'
+} from './assignment/migrations/registered-migration-inventory.js'
 
 // Both read the cell's switch file once it exists; until then, the boot values.
 let cellFlagsApplied: (() => CellFlags) | null = null
@@ -50,6 +53,7 @@ const database = await openRelayDatabaseAtBoot({
   poolMax: config.databasePoolMax,
   applicationName: `orca-relay/${config.role}/${config.cellId}`,
   appliesPostgresSchema: config.role !== 'cell',
+  retiresSlowConnections: config.role !== 'cell',
   readTimeoutMarginOverrideMs: () => cellFlagsApplied?.().readTimeoutMarginMs
 })
 await reconcileCellAdmissionAtStartup(config, new RelayAssignmentStore(database))
@@ -76,9 +80,12 @@ const {
   cellIncarnation,
   shadowSeatPoller
 } = createRelayServer(config, database, { cellFlags: cellFlagChannel?.applied })
-// Same owner as the assignment sweep: the cleanup only expires credentials that every reader
-// already re-checks at read time, so running it in all 23 cells multiplied one table scan by 23
-// without changing any answer.
+// Cloud Run sets K_SERVICE; GCE cells and local runs skip the metadata read.
+if (process.env.K_SERVICE) {
+  void readCloudRunInstanceZone().then((zone) => observability.setInstanceZone(zone))
+  observability.setTcpCounterReader(() => readSandboxTcpCounters())
+}
+// Only assignment-maintenance owner reaps credentials; readers already enforce expiry, so cell-wide copies multiplied scans without changing answers.
 const cleanupTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(
       () =>
@@ -98,7 +105,7 @@ const inventorySnapshotTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const snapshot = await readAssignmentInventorySnapshot(database, Date.now())
-        for (const line of formatAssignmentInventorySnapshot(snapshot)) {console.warn(line)}
+        for (const line of formatAssignmentInventorySnapshot(snapshot)) console.warn(line)
       }, '[orca-relay] inventory snapshot failed')
     }, 60_000)
   : null
@@ -106,7 +113,7 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
       void runRelayBackgroundOperation(async () => {
         const inventory = await readRegisteredMigrationInventory(database, Date.now())
-        for (const line of formatRegisteredMigrationInventory(inventory)) {console.warn(line)}
+        for (const line of formatRegisteredMigrationInventory(inventory)) console.warn(line)
         console.log(
           JSON.stringify({
             event: 'orca_relay_region_correction_outcomes',
@@ -122,7 +129,7 @@ const migrationInventoryTimer = roleOwnsAssignmentMaintenance(config.role)
 let lockWaitSampling = false
 const lockWaitSampleTimer = roleOwnsAssignmentMaintenance(config.role)
   ? setInterval(() => {
-      if (database.dialect !== 'postgres' || lockWaitSampling) {return}
+      if (database.dialect !== 'postgres' || lockWaitSampling) return
       lockWaitSampling = true
       void runRelayBackgroundOperation(async () => {
         observability.recordDatabaseLockWaitSample(await readPostgresLockWaitSample(database))
@@ -173,23 +180,58 @@ const heartbeat = startCellHeartbeat(config, {
   })
 })
 
+// Includes upgraded sockets, which closeAllConnections() does not reach.
+const openSockets = new Set<Socket>()
+server.on('connection', (socket: Socket) => {
+  openSockets.add(socket)
+  socket.once('close', () => openSockets.delete(socket))
+})
 server.listen(config.port, () => {
   console.log(`[orca-relay] listening on ${config.publicUrl} (port ${config.port})`)
 })
 
+// server.close() waits on every socket and stops header timeouts, so one silent TCP peer held exit until docker's SIGKILL.
+const SHUTDOWN_SOCKET_GRACE_MS = 5_000
+const SHUTDOWN_EXIT_BACKSTOP_MS = 10_000
+const SHUTDOWN_POOL_SETTLE_DEADLINE_MS = 9_000
+// pool.end() fails callers still queued for a client, so let checked-out and queued work settle first.
+const databasePoolBusy = (): boolean => {
+  const pool = readRelayDatabasePoolPressure(database)
+  return pool.databasePoolWaiting > 0 || pool.databasePoolTotal > pool.databasePoolIdle
+}
+async function closeDatabaseAndExit(shutdownStartedAt: number): Promise<void> {
+  while (databasePoolBusy() && Date.now() - shutdownStartedAt < SHUTDOWN_POOL_SETTLE_DEADLINE_MS) {
+    await new Promise((resolveTick) => setTimeout(resolveTick, 50))
+  }
+  await database.close().catch(() => undefined)
+  process.exit(0)
+}
+let shuttingDown = false
 const shutdown = (): void => {
-  if (cleanupTimer) {clearInterval(cleanupTimer)}
-  if (assignmentCleanupTimer) {clearInterval(assignmentCleanupTimer)}
-  if (inventorySnapshotTimer) {clearInterval(inventorySnapshotTimer)}
-  if (migrationInventoryTimer) {clearInterval(migrationInventoryTimer)}
-  if (lockWaitSampleTimer) {clearInterval(lockWaitSampleTimer)}
+  if (shuttingDown) {
+    return
+  }
+  shuttingDown = true
+  const shutdownStartedAt = Date.now()
+  setTimeout(() => process.exit(0), SHUTDOWN_EXIT_BACKSTOP_MS).unref()
+  setTimeout(() => {
+    for (const socket of openSockets) {
+      socket.destroy()
+    }
+  }, SHUTDOWN_SOCKET_GRACE_MS).unref()
+  if (cleanupTimer) clearInterval(cleanupTimer)
+  if (assignmentCleanupTimer) clearInterval(assignmentCleanupTimer)
+  if (inventorySnapshotTimer) clearInterval(inventorySnapshotTimer)
+  if (migrationInventoryTimer) clearInterval(migrationInventoryTimer)
+  if (lockWaitSampleTimer) clearInterval(lockWaitSampleTimer)
   observability.stop()
   heartbeat?.stop()
   regionalRehomeWorker?.stop()
   shadowSeatPoller?.stop()
   cellFlagChannel?.stop()
   sessions.drain(0)
-  server.close(() => void database.close().catch(() => undefined))
+  server.close(() => void closeDatabaseAndExit(shutdownStartedAt).catch(() => undefined))
 }
-process.once('SIGTERM', shutdown)
-process.once('SIGINT', shutdown)
+// A repeated signal must not fall through to Node's default immediate exit.
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)

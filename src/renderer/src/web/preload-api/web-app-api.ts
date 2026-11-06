@@ -13,6 +13,7 @@ export function createWebAppApi(): Partial<PreloadApi> {
       isProfileStateSaveDelayed: () => Promise.resolve(false),
       onProfileStateSaveDelayChanged: () => () => undefined,
       getWindowsAdministratorStatus: () => Promise.resolve(null),
+      getMacosUpgradeSupport: () => Promise.resolve('unknown'),
       restartAsAdministrator: () =>
         Promise.reject(new Error('Administrator restart requires the Windows desktop app.')),
       getIdentity: () =>
@@ -26,6 +27,7 @@ export function createWebAppApi(): Partial<PreloadApi> {
           dockBadgeLabel: null
         }),
       getFeatureWallAssetBaseUrl: () => Promise.resolve('/'),
+      setWindowMaterialSuppressed: () => Promise.resolve(),
       relaunch: () => Promise.resolve(window.location.reload()),
       restart: () => Promise.resolve(window.location.reload()),
       reload: () => Promise.resolve(window.location.reload()),
