@@ -273,7 +273,6 @@ export function applyTerminalAppearance(
 
   manager.setPaneStyleOptions({
     splitBackground: `var(--desktop-terminal-split-background, ${paneBackground})`,
-    paneBackground,
     inactivePaneOpacity: paneStyles.inactivePaneOpacity,
     activePaneOpacity: paneStyles.activePaneOpacity,
     opacityTransitionMs: paneStyles.opacityTransitionMs,

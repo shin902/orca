@@ -4,7 +4,7 @@ import {
   type BrowserWindowConstructorOptions,
   type IpcMainEvent
 } from 'electron'
-import type { Store } from '../persistence'
+import type { Store } from '../persistence/loading-store/store'
 import { DEFAULT_DESKTOP_BACKGROUND, resolveBackgroundMode } from '../../shared/desktop-background'
 import { connectThemeDaemon } from './theme-daemon-client'
 
