@@ -222,6 +222,7 @@ export function TerminalSettingsPreview({
   }, [
     composedTheme,
     effectiveMode,
+    backgroundOpacity,
     settings.backgroundMode,
     settings.terminalBackgroundOpacity,
     settings.terminalMinimumContrastRatio
