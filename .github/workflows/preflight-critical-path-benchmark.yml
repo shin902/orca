@@ -26,7 +26,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 2
+          # Depth 3 covers the PR head's parent: the benchmark resolves its
+          # baseline from HEAD^2^1 on merge-commit checkouts.
+          fetch-depth: 3
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node

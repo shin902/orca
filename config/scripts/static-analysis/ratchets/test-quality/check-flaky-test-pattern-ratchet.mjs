@@ -47,6 +47,8 @@ function git(root, args, options = {}) {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
+    // A sync PR's diff exceeds Node's 1 MB default (this PR: ~3.2 MB of names).
+    maxBuffer: 64 * 1024 * 1024,
     ...options
   })
 }

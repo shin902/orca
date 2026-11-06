@@ -47,11 +47,28 @@ const currentScriptPaths = {
     'config/scripts/static-analysis/process-boundaries/gated-call-use-collector.mjs'
 }
 
+function resolveBaselineRef() {
+  // On a pull_request checkout HEAD is the merge commit, whose first parent is
+  // the base. The baseline comes from the first parent of the PR head instead.
+  for (const ref of ['HEAD^2^1', 'HEAD^1']) {
+    const result = runProcessSync({
+      program: 'git',
+      args: ['rev-parse', '--verify', '--quiet', ref],
+      cwd: root
+    })
+    if (result.code === 0) {
+      return ref
+    }
+  }
+  throw new Error('Cannot resolve a baseline commit')
+}
+const baselineRef = resolveBaselineRef()
+
 function baselineScriptPath(file) {
   const canonical = currentScriptPaths[file] ?? file
   const result = runProcessSync({
     program: 'git',
-    args: ['cat-file', '-e', `HEAD^1:${canonical}`],
+    args: ['cat-file', '-e', `${baselineRef}:${canonical}`],
     cwd: root
   })
   return result.code === 0 ? canonical : file
@@ -87,7 +104,7 @@ function relocateBaselineDependencies(contents) {
 function baselineSource(file) {
   const result = runProcessSync({
     program: 'git',
-    args: ['show', `HEAD^1:${baselineScriptPath(file)}`],
+    args: ['show', `${baselineRef}:${baselineScriptPath(file)}`],
     cwd: root
   })
   if (result.code !== 0 || result.outputTruncated) {
@@ -171,7 +188,7 @@ try {
         args: [
           'diff',
           '--quiet',
-          'HEAD^1',
+          baselineRef,
           'HEAD',
           '--',
           'config/scripts/static-analysis/process-boundaries/check-main-sync-spawn-ratchet.mjs',
