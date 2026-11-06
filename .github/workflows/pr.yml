@@ -338,6 +338,8 @@ jobs:
         env:
           PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+          # Review the fork delta, not unchanged code imported from the stable release.
+          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && 'a162e08b29b2883b02d8a0dfcc99e26c80b2cfe7' || '' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
           node config/scripts/preflight/changed-checks/check-changed-code-quality.mjs "${{ github.event.pull_request.base.sha }}"

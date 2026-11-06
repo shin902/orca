@@ -164,8 +164,11 @@ export function collectAddedLineRanges(
 ) {
   // PR checkout HEAD is the merge commit: first parent identifies base without shallow-clone missing payload ancestry.
   // Local branch tips still need merge-base to isolate their changes.
+  // An explicitly requested base wins over the merge-ref first parent: a fork
+  // reviewing its delta against the imported release would otherwise review the
+  // whole imported interval instead of the fork delta.
   const comparisonBase =
-    resolvePullRequestDiffBase(root, null) ??
+    resolvePullRequestDiffBase(root, requestedBase, undefined, true) ??
     runGit(root, ['merge-base', resolveBase(root, requestedBase), 'HEAD']).trim()
   const changedEntries = splitNullDelimited(
     runGit(root, ['diff', '--name-status', '--find-renames', '-z', comparisonBase, '--'])
@@ -583,7 +586,11 @@ export function runAstGrepScan(root, files) {
 
 export function main(
   root = process.cwd(),
-  requestedBase = process.argv.slice(2).find((argument) => argument !== '--')
+  // ORCA_CODE_QUALITY_BASE is the env channel the local driver uses to hand spawned
+  // gates their base; a fork CI step sets it to the imported release so this gate
+  // reviews the fork delta instead of the whole imported interval.
+  requestedBase = process.env.ORCA_CODE_QUALITY_BASE ??
+    process.argv.slice(2).find((argument) => argument !== '--')
 ) {
   const { comparisonBase, rangesByFile } = collectAddedLineRanges(root, requestedBase)
   const files = [...rangesByFile.keys()]

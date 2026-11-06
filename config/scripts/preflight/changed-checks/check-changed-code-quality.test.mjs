@@ -43,6 +43,67 @@ describe('changed-code quality line matching', () => {
   })
 })
 
+describe('explicit diff base on a PR merge ref', () => {
+  it('reviews the requested base instead of the merge first parent', () => {
+    const repo = mkdtempSync(path.join(tmpdir(), 'changed-code-quality-explicit-base-'))
+    const previousEvent = process.env.GITHUB_EVENT_NAME
+    try {
+      const git = (...args) => {
+        const result = runProcessSync({
+          program: 'git',
+          args: ['-c', 'commit.gpgsign=false', ...args],
+          cwd: repo
+        })
+        expect(result.code, result.stderr).toBe(0)
+        return result.stdout.trim()
+      }
+      git('init', '--quiet')
+      writeFileSync(path.join(repo, 'a.ts'), 'export const a = 1\n')
+      writeFileSync(path.join(repo, 'b.ts'), 'export const b = 1\n')
+      git('add', '.')
+      git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'base')
+      const base = git('rev-parse', 'HEAD')
+      writeFileSync(path.join(repo, 'a.ts'), 'export const a = 2\n')
+      git('add', 'a.ts')
+      git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'main line')
+      const firstParent = git('rev-parse', 'HEAD')
+      git('checkout', '-qb', 'fork', base)
+      writeFileSync(path.join(repo, 'b.ts'), 'export const b = 2\n')
+      git('add', 'b.ts')
+      git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'fork line')
+      git('checkout', '-q', '-')
+      git(
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@example.invalid',
+        'merge',
+        '--no-edit',
+        '--quiet',
+        'fork'
+      )
+      process.env.GITHUB_EVENT_NAME = 'pull_request'
+
+      const explicit = collectAddedLineRanges(repo, base)
+      expect(explicit.comparisonBase).toBe(base)
+      expect(explicit.rangesByFile.get('a.ts')).toEqual([{ start: 1, end: 1 }])
+      expect(explicit.rangesByFile.get('b.ts')).toEqual([{ start: 1, end: 1 }])
+
+      const merged = collectAddedLineRanges(repo, null)
+      expect(merged.comparisonBase).toBe(firstParent)
+      expect(merged.rangesByFile.get('a.ts')).toBeUndefined()
+      expect(merged.rangesByFile.get('b.ts')).toEqual([{ start: 1, end: 1 }])
+    } finally {
+      if (previousEvent === undefined) {
+        delete process.env.GITHUB_EVENT_NAME
+      } else {
+        process.env.GITHUB_EVENT_NAME = previousEvent
+      }
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('moved-code exemption', () => {
   it('reads the base text of a file that was renamed away', () => {
     const repo = mkdtempSync(path.join(tmpdir(), 'changed-code-quality-rename-'))
