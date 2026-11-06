@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  RUNTIME_PROTOCOL_BASE_ENV,
   RUNTIME_PROTOCOL_OVERRIDE_ENV,
   checkRuntimeLauncherProtocolRatchet
 } from './check-runtime-launcher-protocol-ratchet.mjs'
@@ -70,6 +71,26 @@ afterEach(() => {
   }
 })
 
+/**
+ * A base commit at protocol 3, a release commit at protocol 4, and an
+ * uncommitted candidate shaped by `candidateProtocol` plus a launcher edit.
+ */
+function repoWithReleaseAndCandidate(candidateProtocol) {
+  const repo = mkdtempSync(join(tmpdir(), 'runtime-launcher-ratchet-'))
+  repos.push(repo)
+  git(repo, ['init', '-q'])
+  writeProtocol(repo, 3)
+  write(repo, LAUNCHER, 'export const launcher = 1\n')
+  write(repo, 'src/unrelated.ts', 'export const unrelated = 1\n')
+  const base = commit(repo, 'base')
+  writeProtocol(repo, 4)
+  const release = commit(repo, 'release')
+  git(repo, ['checkout', '-q', base])
+  writeProtocol(repo, candidateProtocol)
+  write(repo, LAUNCHER, 'export const launcher = 2\n')
+  return { repo, base, release }
+}
+
 describe('checkRuntimeLauncherProtocolRatchet against git history', () => {
   it('enforces the restriction when the base predates the protocol source move', () => {
     const { repo, base } = repoWithCandidate((candidate) => {
@@ -103,6 +124,29 @@ describe('checkRuntimeLauncherProtocolRatchet against git history', () => {
       write(candidate, 'src/unrelated.ts', 'export const unrelated = 2\n')
     })
     expect(checkRuntimeLauncherProtocolRatchet({ repoRoot: repo, base, env: {} }).ok).toBe(true)
+  })
+
+  it('passes a sync-style bump when the protocol base is the release', () => {
+    const { repo, base, release } = repoWithReleaseAndCandidate(4)
+    expect(checkRuntimeLauncherProtocolRatchet({ repoRoot: repo, base, env: {} }).ok).toBe(false)
+    expect(
+      checkRuntimeLauncherProtocolRatchet({
+        repoRoot: repo,
+        base,
+        env: { [RUNTIME_PROTOCOL_BASE_ENV]: release }
+      }).ok
+    ).toBe(true)
+  })
+
+  it('still fails when the candidate bumps past the protocol base', () => {
+    const { repo, base, release } = repoWithReleaseAndCandidate(5)
+    expect(
+      checkRuntimeLauncherProtocolRatchet({
+        repoRoot: repo,
+        base,
+        env: { [RUNTIME_PROTOCOL_BASE_ENV]: release }
+      }).ok
+    ).toBe(false)
   })
 
   it('ignores edits to the protocol file that keep PROTOCOL_VERSION', () => {

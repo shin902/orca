@@ -1,5 +1,10 @@
 // R3/D7.1: never combine runtime-host swaps with daemon protocol bumps; together they strand live terminals on upgrade and rollback.
 // Usage: node check-runtime-launcher-protocol-ratchet.mjs --base <ref>
+// ORCA_RUNTIME_LAUNCHER_PROTOCOL_BASE optionally names the ref the protocol
+// version is measured against (default: --base). A sync PR measures it against
+// the release it imports: the release itself bumped the protocol and touched
+// launcher files, so measuring against the fork's stale PR base would fail
+// every sync. The changed-files side still uses --base.
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -37,6 +42,7 @@ export const RUNTIME_LAUNCHER_PATHS = [
 
 export const RUNTIME_PROTOCOL_OVERRIDE_ENV = 'ORCA_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP'
 export const RUNTIME_PROTOCOL_OVERRIDE_LABEL = 'allow-runtime-launcher-protocol-bump'
+export const RUNTIME_PROTOCOL_BASE_ENV = 'ORCA_RUNTIME_LAUNCHER_PROTOCOL_BASE'
 
 function git(repoRoot, args) {
   return execFileSync('git', args, {
@@ -48,19 +54,22 @@ function git(repoRoot, args) {
 }
 
 /**
- * @param {{ changedFiles: string[], baseProtocolVersion: number, candidateProtocolVersion: number, overridden: boolean }} input
+ * @param {{ changedFiles: string[], baseProtocolVersion: number, candidateProtocolVersion: number, overridden: boolean, protocolBaseRef?: string }} input
  */
 export function assessRuntimeLauncherProtocolRatchet({
   changedFiles,
   baseProtocolVersion,
   candidateProtocolVersion,
-  overridden
+  overridden,
+  protocolBaseRef
 }) {
   const launcherChanges = RUNTIME_LAUNCHER_PATHS.filter((path) => changedFiles.includes(path))
   const protocolChanged = baseProtocolVersion !== candidateProtocolVersion
   const violated = protocolChanged && launcherChanges.length > 0
   const lines = [
-    `daemon PROTOCOL_VERSION: base ${baseProtocolVersion}, candidate ${candidateProtocolVersion}`,
+    protocolBaseRef
+      ? `daemon PROTOCOL_VERSION: base ${baseProtocolVersion} (protocol base ${protocolBaseRef}), candidate ${candidateProtocolVersion}`
+      : `daemon PROTOCOL_VERSION: base ${baseProtocolVersion}, candidate ${candidateProtocolVersion}`,
     launcherChanges.length > 0
       ? `runtime launcher files changed: ${launcherChanges.join(', ')}`
       : 'runtime launcher files changed: none'
@@ -90,7 +99,8 @@ export function checkRuntimeLauncherProtocolRatchet({ repoRoot, base, env = proc
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-  const baseFacts = readDaemonProtocolRevisionFacts(repoRoot, base)
+  const protocolBase = env[RUNTIME_PROTOCOL_BASE_ENV]?.trim() || base
+  const baseFacts = readDaemonProtocolRevisionFacts(repoRoot, protocolBase)
   const candidateFacts = parseDaemonProtocolFacts(
     readFileSync(join(repoRoot, DAEMON_PROTOCOL_SOURCE_PATH), 'utf8'),
     DAEMON_PROTOCOL_SOURCE_PATH
@@ -99,7 +109,8 @@ export function checkRuntimeLauncherProtocolRatchet({ repoRoot, base, env = proc
     changedFiles,
     baseProtocolVersion: baseFacts.protocolVersion,
     candidateProtocolVersion: candidateFacts.protocolVersion,
-    overridden: isOverrideEnabled(env)
+    overridden: isOverrideEnabled(env),
+    protocolBaseRef: protocolBase === base ? undefined : protocolBase
   })
 }
 

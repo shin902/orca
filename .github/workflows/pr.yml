@@ -1046,10 +1046,15 @@ jobs:
 
       # R3: a runtime launcher swap must not also bump the daemon protocol (D7.1).
       # The label is read from the event payload, so push again after applying it.
+      # The protocol version is measured against the newest release this sync
+      # imports, not the fork's stale PR base: the release itself bumped the
+      # protocol and touched launcher files, so the PR-base comparison would
+      # fail every sync. The changed-files side still uses the PR base.
       - name: Runtime launcher change does not bump daemon protocol
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           ORCA_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'allow-runtime-launcher-protocol-bump') }}
+          ORCA_RUNTIME_LAUNCHER_PROTOCOL_BASE: ${{ env.ORCA_CROSS_VERSION_BASELINE_REF }}
         run: |
           DIFF_BASE="$(node config/scripts/git/pr-diff-base/git-pull-request-diff-base.mjs "$BASE_SHA")"
           pnpm run check:runtime-launcher-protocol-ratchet -- --base "$DIFF_BASE"
