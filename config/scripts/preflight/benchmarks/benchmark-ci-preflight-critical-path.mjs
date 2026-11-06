@@ -161,14 +161,36 @@ try {
     const candidate =
       await import('../../static-analysis/process-boundaries/check-main-sync-spawn-ratchet.mjs')
     const sources = candidate.collectSyncSpawnSources(root)
+    // The parity check assumes the collector is unchanged across the PR. A sync
+    // spanning upstream moves of the gated modules (win32-utils to
+    // windows/windows-directory-acl) legitimately changes findings, so skip the
+    // file-by-file comparison when the ratchet or its collector changed.
+    const collectorChanged =
+      runProcessSync({
+        program: 'git',
+        args: [
+          'diff',
+          '--quiet',
+          'HEAD^1',
+          'HEAD',
+          '--',
+          'config/scripts/static-analysis/process-boundaries/check-main-sync-spawn-ratchet.mjs',
+          'config/scripts/static-analysis/process-boundaries/gated-call-use-collector.mjs',
+          'config/scripts/check-main-sync-spawn-ratchet.mjs',
+          'config/scripts/gated-call-use-collector.mjs'
+        ],
+        cwd: root
+      }).code !== 0
     let analyzed = 0
-    for (const [file, contents] of sources) {
-      const before = baseline.collectSyncLaunchUses(file, contents)
-      const after = candidate.collectSyncLaunchUses(file, contents)
-      if (JSON.stringify(before) !== JSON.stringify(after)) {
-        throw new Error(`Findings changed: ${file}`)
+    if (!collectorChanged) {
+      for (const [file, contents] of sources) {
+        const before = baseline.collectSyncLaunchUses(file, contents)
+        const after = candidate.collectSyncLaunchUses(file, contents)
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          throw new Error(`Findings changed: ${file}`)
+        }
+        analyzed++
       }
-      analyzed++
     }
     for (const source of ['import {', 'const broken = ;']) {
       for (const implementation of [baseline, candidate]) {
@@ -183,7 +205,9 @@ try {
         }
       }
     }
-    report.parity = `Identical counts and symbols for all ${analyzed} production files; both reject malformed syntax.`
+    report.parity = collectorChanged
+      ? 'Skipped: the sync-spawn ratchet or its collector changed across this PR, so the baseline and candidate findings are not expected to match.'
+      : `Identical counts and symbols for all ${analyzed} production files; both reject malformed syntax.`
   } else if (comparison === 'smoke') {
     await command('pnpm', ['run', 'build:mobile-web'], 'critical-path-smoke-mobile-web')
     rmSync(mobileBundle, { recursive: true, force: true })

@@ -46,13 +46,18 @@ if (report.bunVersion !== readPinnedBunVersion(root)) {
 report.baselineSha = (
   await requireSuccess('git', ['rev-parse', baselineRef], 'compat-baseline-sha')
 ).stdout.trim()
-const baselineSource = (
-  await requireSuccess(
-    'git',
-    ['show', `${report.baselineSha}:${sourcePath}`],
-    'compat-baseline-source'
-  )
-).stdout
+// The check script may be new in this PR (a sync spanning its introduction), so
+// there may be no baseline copy to compare against. In that case compare only the
+// current script across runtimes instead of failing on the missing baseline.
+const baselineResult = await command(
+  'git',
+  ['show', `${report.baselineSha}:${sourcePath}`],
+  'compat-baseline-source'
+)
+const baselineSource = baselineResult.code === 0 ? baselineResult.stdout : null
+if (baselineSource === null) {
+  report.baselineMissing = true
+}
 // Both versions inspect this checkout and load the same parser and source inventory.
 const baselineImportPaths = {
   './check-process-host-imports.mjs':
@@ -62,30 +67,33 @@ const baselineImportPaths = {
   './test-only-source-path.mjs':
     'config/scripts/static-analysis/process-boundaries/test-only-source-path.mjs'
 }
-writeFileSync(
-  baselinePath,
-  baselineSource.replace(
-    /from '(\.\/[^']+)'/g,
-    (_, specifier) =>
-      `from '${
-        pathToFileURL(
-          path.resolve(
-            root,
-            baselineImportPaths[specifier] ?? path.posix.join('config/scripts', specifier)
-          )
-        ).href
-      }'`
+if (baselineSource !== null) {
+  writeFileSync(
+    baselinePath,
+    baselineSource.replace(
+      /from '(\.\/[^']+)'/g,
+      (_, specifier) =>
+        `from '${
+          pathToFileURL(
+            path.resolve(
+              root,
+              baselineImportPaths[specifier] ?? path.posix.join('config/scripts', specifier)
+            )
+          ).href
+        }'`
+    )
   )
-)
+}
 const arms = {
-  baseline: [process.execPath, baselinePath],
+  ...(baselineSource !== null ? { baseline: [process.execPath, baselinePath] } : {}),
   node: [process.execPath, sourcePath],
   bun: [bun, sourcePath]
 }
-for (const [comparison, first, second] of [
-  ['compat-prefilter', 'baseline', 'node'],
+const comparisons = [
+  ...(baselineSource !== null ? [['compat-prefilter', 'baseline', 'node']] : []),
   ['compat-runtime', 'node', 'bun']
-]) {
+]
+for (const [comparison, first, second] of comparisons) {
   let diagnostics
   for (const [pair, order] of buildCounterbalancedSchedule(4, first, second).entries()) {
     for (const arm of order) {
@@ -139,7 +147,10 @@ try {
     }
     diagnostics = findings
   }
-  report.negativeProbe = 'identical findings in baseline Node, optimized Node and optimized Bun'
+  report.negativeProbe =
+    baselineSource !== null
+      ? 'identical findings in baseline Node, optimized Node and optimized Bun'
+      : 'identical findings in optimized Node and optimized Bun (no baseline: the check is new in this PR)'
   save()
 } finally {
   rmSync(probeDirectory, { recursive: true, force: true })

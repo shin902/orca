@@ -329,6 +329,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Restore the head checkout on exit: the base may predate the local
+          # setup-pnpm action, whose post step needs its action.yml present.
+          trap 'git checkout --quiet --detach "$GITHUB_SHA"' EXIT
           tools="$RUNNER_TEMP/native-fingerprint"
           mkdir -p "$tools"
           cp scripts/native-client.mjs scripts/native-build-cache.cjs "$tools/"
