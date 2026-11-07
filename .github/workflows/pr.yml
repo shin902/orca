@@ -1034,7 +1034,9 @@ jobs:
             refs/tags/v1.4.222:refs/tags/v1.4.222 \
             refs/tags/v1.4.224:refs/tags/v1.4.224 \
             refs/tags/v1.4.228:refs/tags/v1.4.228 \
-            refs/tags/v1.4.244:refs/tags/v1.4.244
+            refs/tags/v1.4.229:refs/tags/v1.4.229 \
+            refs/tags/v1.4.244:refs/tags/v1.4.244 \
+            refs/tags/v1.4.245:refs/tags/v1.4.245
 
       - uses: ./.github/actions/install-node-dependencies
         with:
