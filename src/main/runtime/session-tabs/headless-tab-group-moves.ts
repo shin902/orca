@@ -12,21 +12,17 @@ import {
 import { randomUUID } from 'node:crypto'
 import { withSelectedTabs } from '../headless-tab-group-selection'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
-import type { OrcaRuntimeWithPersistHeadlessTerminalTitle } from '../workspaces/workspace-file-session-targets'
+import type { RuntimeMobileSessionTabOrder } from './mobile-session-tab-order'
 import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 
 export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabProperties {
   protected abstract resolveMobileSessionHostTabId(
-    ...args: Parameters<
-      OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']
-    >
-  ): ReturnType<OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']>
+    ...args: Parameters<RuntimeMobileSessionTabOrder['resolveMobileSessionHostTabId']>
+  ): ReturnType<RuntimeMobileSessionTabOrder['resolveMobileSessionHostTabId']>
 
   protected abstract normalizeMobileSessionTabOrder(
-    ...args: Parameters<
-      OrcaRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']
-    >
-  ): ReturnType<OrcaRuntimeWithPersistHeadlessTerminalTitle['normalizeMobileSessionTabOrder']>
+    ...args: Parameters<RuntimeMobileSessionTabOrder['normalizeMobileSessionTabOrder']>
+  ): ReturnType<RuntimeMobileSessionTabOrder['normalizeMobileSessionTabOrder']>
 
   protected abstract toMobileSessionTabsResult(
     ...args: Parameters<
@@ -65,8 +61,7 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     const active = nextTabs.find((candidate) => candidate.isActive) ?? nextTabs[0] ?? null
     const reorderedTargetActiveTabId =
       active?.type === 'terminal' ? active.parentTabId : active ? active.id : (tabOrder[0] ?? null)
-    // Why: reorder only changes ONE group's order. Preserve every other group so
-    // a multi-group split isn't deleted by re-sorting tabs in one of its groups.
+    // Reorder only the addressed group or multi-group siblings disappear.
     const existingGroups = snapshot.tabGroups ?? []
     const nextGroups = existingGroups.some((group) => group.id === targetGroup.id)
       ? existingGroups.map((group) =>
@@ -90,9 +85,7 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     return { moved: true }
   }
 
-  // Why: a drag-to-split-group used to be a client-only change the headless host
-  // never modeled, so the next snapshot coalesced every tab back into one group.
-  // Model + persist the multi-group layout so the split survives rebuilds.
+  // Persist headless split groups or snapshot rebuilds coalesce them back into one.
   protected splitHeadlessMobileSessionTabGroup(
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot,
@@ -169,7 +162,7 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     return { moved: true }
   }
 
-  // Why: the builders return null for a missing target AND a legit no-op; only the no-op may succeed.
+  // Builders return null for missing targets and legitimate no-ops; only no-ops succeed.
   protected requireHeadlessTargetGroup(
     snapshot: RuntimeMobileSessionTabsSnapshot,
     targetGroupId: string
@@ -183,8 +176,7 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     return targetGroup
   }
 
-  // Persist the headless tab-GROUP layout so snapshot rebuilds keep the split; the tab bar follows
-  // the groups. Deleted by the switch (PR 6), when moves are layout commands.
+  // Persist headless groups across rebuilds; obsolete when group moves become layout commands.
   protected persistHeadlessTabGroups(
     worktreeId: string,
     groups: readonly RuntimeMobileSessionTabGroup[],

@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as GitExecFileModule from '../git/command-runner/git-exec-file'
+import type * as GhExecFileModule from '../git/command-runner/gh-exec-file'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GithubApiRepositoryModule from './github-api-repository'
 import type * as GitHubEnterpriseRepositoryModule from './github-enterprise-repository'
 
@@ -9,6 +11,16 @@ const { clientMocks, moduleMocks } = await vi.hoisted(async () => {
 
 vi.mock('./gh-utils', () => moduleMocks.ghUtilsModuleMock(clientMocks))
 vi.mock('../git/runner', () => moduleMocks.gitRunnerModuleMock(clientMocks))
+
+vi.mock('../git/command-runner/git-exec-file', async (importOriginal) => ({
+  ...(await importOriginal<typeof GitExecFileModule>()),
+  gitExecFileAsync: clientMocks.gitExecFileAsyncMock
+}))
+
+vi.mock('../git/command-runner/gh-exec-file', async (importOriginal) => ({
+  ...(await importOriginal<typeof GhExecFileModule>()),
+  ghExecFileAsync: clientMocks.ghExecFileAsyncMock
+}))
 vi.mock('./local-git-config-signature', () =>
   moduleMocks.localGitConfigSignatureModuleMock(clientMocks)
 )
@@ -27,24 +39,28 @@ vi.mock('./github-api-repository', async (importOriginal) =>
 
 import { getPRForBranchOutcome } from './client/lookup/pr-for-branch-outcome'
 import { getPRForBranch } from './client/lookup/get-pr-for-branch'
-import { resetPRForBranchMocks } from './client-test-harness'
+import { installIndependentCheckFixtures, resetPRForBranchMocks } from './client-test-harness'
 
 const {
-  ghExecFileAsyncMock,
   getOwnerRepoMock,
   resolvePRRepositoryCandidatesMock,
   gitExecFileAsyncMock,
   rateLimitGuardMock
 } = clientMocks
 
+const metadataRequests = vi.fn()
+const unexpectedChecks: string[][] = []
+afterEach(() => expect(unexpectedChecks).toEqual([]))
+
 describe('getPRForBranch', () => {
   beforeEach(() => {
     resetPRForBranchMocks(clientMocks)
+    installIndependentCheckFixtures(clientMocks, metadataRequests, unexpectedChecks)
   })
 
   it('ignores merged PRs discovered only by branch lookup when the branch moved on', async () => {
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'acme', repo: 'widgets' })
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({
         stdout: JSON.stringify([
           {
@@ -89,7 +105,7 @@ describe('getPRForBranch', () => {
 
   it('shows a merged branch PR when it still matches the current HEAD', async () => {
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'acme', repo: 'widgets' })
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({
         stdout: JSON.stringify([
           {
@@ -142,7 +158,7 @@ describe('getPRForBranch', () => {
 
   const mockMergedBranchPRLookupBehindHead = (prNumber = 6011): void => {
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'acme', repo: 'widgets' })
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({
         stdout: JSON.stringify([
           {
@@ -183,13 +199,13 @@ describe('getPRForBranch', () => {
 
   it('shows a merged branch PR when the worktree head is one of its own commits', async () => {
     mockMergedBranchPRLookupBehindHead()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify([{ number: 6011 }, { number: 42 }])
     })
 
     const pr = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
-    expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
+    expect(metadataRequests).toHaveBeenNthCalledWith(
       3,
       ['api', 'repos/acme/widgets/commits/bbbb2222bbbb2222/pulls?per_page=100&page=1'],
       expect.anything()
@@ -204,27 +220,25 @@ describe('getPRForBranch', () => {
 
   it('keeps hiding a merged branch PR when the head belongs to a different PR (reused branch)', async () => {
     mockMergedBranchPRLookupBehindHead()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify([{ number: 42 }])
     })
 
     const pr = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
     expect(pr).toBeNull()
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(3)
+    expect(metadataRequests).toHaveBeenCalledTimes(3)
 
-    // A definitive "not part of this PR" answer is immutable for a merged PR:
-    // repeated polls must not re-probe GitHub.
     mockMergedBranchPRLookupBehindHead()
     const second = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
     expect(second).toBeNull()
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(5)
+    expect(metadataRequests).toHaveBeenCalledTimes(5)
   })
 
   it('keeps hiding a merged branch PR when the commit membership probe fails', async () => {
     mockMergedBranchPRLookupBehindHead()
-    ghExecFileAsyncMock.mockRejectedValueOnce(new Error('HTTP 422: No commit found'))
+    metadataRequests.mockRejectedValueOnce(new Error('HTTP 422: No commit found'))
 
     const pr = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
@@ -242,29 +256,28 @@ describe('getPRForBranch', () => {
     const pr = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
     expect(pr).toBeNull()
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(2)
+    expect(metadataRequests).toHaveBeenCalledTimes(2)
   })
 
   it('reuses the cached membership answer instead of re-querying per poll', async () => {
     mockMergedBranchPRLookupBehindHead()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify([{ number: 6011 }])
     })
     const first = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
     expect(first).toMatchObject({ number: 6011, confirmedContainedHeadOid: 'bbbb2222bbbb2222' })
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(3)
+    expect(metadataRequests).toHaveBeenCalledTimes(3)
 
     mockMergedBranchPRLookupBehindHead()
     const second = await getPRForBranch('/repo-root', 'fix-hibernation-wake')
 
     expect(second).toMatchObject({ number: 6011, confirmedContainedHeadOid: 'bbbb2222bbbb2222' })
-    // No fourth membership call: the confirmed answer is immutable and cached.
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(5)
+    expect(metadataRequests).toHaveBeenCalledTimes(5)
   })
 
   it('uses the caller-supplied worktree head for the membership probe without shelling out', async () => {
     getOwnerRepoMock.mockResolvedValueOnce({ owner: 'acme', repo: 'widgets' })
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({
         stdout: JSON.stringify([
           {
@@ -312,9 +325,7 @@ describe('getPRForBranch', () => {
       }
     )
 
-    // Why: the merged-implicit head probe must use the supplied oid — no
-    // `rev-parse HEAD` shell-out. (The #9171 guard may still probe the repo
-    // default branch for this non-open implicit result; that is unrelated.)
+    // Use the supplied head without rev-parse; independent default-branch probes remain allowed.
     expect(
       gitExecFileAsyncMock.mock.calls.some(
         (call) => call[0][0] === 'rev-parse' && call[0][1] === 'HEAD'
@@ -335,7 +346,7 @@ describe('getPRForBranch', () => {
       candidates: [{ owner: 'acme', repo: 'widgets' }],
       headRepo: { owner: 'acme', repo: 'widgets' }
     })
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify({
         number: prNumber,
         title: 'Merged linked PR',
@@ -355,7 +366,7 @@ describe('getPRForBranch', () => {
 
   it('stamps confirmedContainedHeadOid for a linked merged PR when HEAD is its commit', async () => {
     mockMergedLinkedPRLookup()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify([{ number: 7447 }])
     })
 
@@ -378,7 +389,7 @@ describe('getPRForBranch', () => {
 
   it('stamps headDivergedFromMergedPRAtOid for a linked merged PR with a definite miss', async () => {
     mockMergedLinkedPRLookup()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify([{ number: 42 }])
     })
 
@@ -398,10 +409,9 @@ describe('getPRForBranch', () => {
 
   it('stamps linked merged divergence when a later membership page proves absence', async () => {
     mockMergedLinkedPRLookup()
-    // Page 1 is full and omits the linked PR (truncated), but page 2 is short and
-    // still omits it — that pair definitively proves the head is not contained.
+    // A short second page proves absence after a full first page.
     const fullPage = Array.from({ length: 100 }, (_, index) => ({ number: 1000 + index }))
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({ stdout: JSON.stringify(fullPage) })
       .mockResolvedValueOnce({ stdout: JSON.stringify([{ number: 2000 }]) })
 
@@ -417,11 +427,10 @@ describe('getPRForBranch', () => {
 
   it('leaves linked merged divergence unset when membership pages stay full to the cap', async () => {
     mockMergedLinkedPRLookup()
-    // Every page up to the cap is full and omits the linked PR, so absence can
-    // never be proven — the probe must stay unknown rather than clear the link.
+    // Full pages through the cap cannot prove absence, so preserve the durable link.
     const fullPage = Array.from({ length: 100 }, (_, index) => ({ number: 1000 + index }))
     for (let page = 0; page < 5; page += 1) {
-      ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: JSON.stringify(fullPage) })
+      metadataRequests.mockResolvedValueOnce({ stdout: JSON.stringify(fullPage) })
     }
 
     const outcome = await getPRForBranchOutcome('/repo-root', 'new-work', 7447, null, null, {
@@ -435,11 +444,9 @@ describe('getPRForBranch', () => {
   })
 
   it('stamps linked merged divergence via the PR url when no repo candidates resolve', async () => {
-    // Fallback path: no resolved candidates, so `gh pr view` returns the PR with
-    // dataRepo=null. The membership probe must still run against the repo derived
-    // from the PR's own URL so a diverged merged linked PR can clear.
+    // Without resolved candidates, derive the membership-probe repository from the PR URL.
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({ candidates: [], headRepo: null })
-    ghExecFileAsyncMock
+    metadataRequests
       .mockResolvedValueOnce({
         stdout: JSON.stringify({
           number: 7447,
@@ -466,7 +473,7 @@ describe('getPRForBranch', () => {
       kind: 'found',
       pr: { number: 7447, state: 'merged', headDivergedFromMergedPRAtOid: 'bbbb2222bbbb2222' }
     })
-    expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
+    expect(metadataRequests).toHaveBeenCalledWith(
       ['api', 'repos/acme/widgets/commits/bbbb2222bbbb2222/pulls?per_page=100&page=1'],
       expect.anything()
     )
@@ -488,12 +495,12 @@ describe('getPRForBranch', () => {
     expect(outcome.kind === 'found' ? outcome.pr.headDivergedFromMergedPRAtOid : undefined).toBe(
       undefined
     )
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(2)
+    expect(metadataRequests).toHaveBeenCalledTimes(2)
   })
 
   it('leaves linked merged divergence unset when the membership probe throws', async () => {
     mockMergedLinkedPRLookup()
-    ghExecFileAsyncMock.mockRejectedValueOnce(new Error('HTTP 422: No commit found'))
+    metadataRequests.mockRejectedValueOnce(new Error('HTTP 422: No commit found'))
 
     const outcome = await getPRForBranchOutcome('/repo-root', 'new-work', 7447, null, null, {
       currentHeadOid: 'bbbb2222bbbb2222'
@@ -507,7 +514,7 @@ describe('getPRForBranch', () => {
 
   it('leaves linked merged divergence unset when the membership probe returns a non-array payload', async () => {
     mockMergedLinkedPRLookup()
-    ghExecFileAsyncMock.mockResolvedValueOnce({
+    metadataRequests.mockResolvedValueOnce({
       stdout: JSON.stringify({ message: 'Server Error' })
     })
 
@@ -530,6 +537,6 @@ describe('getPRForBranch', () => {
     expect(outcome.kind === 'found' ? outcome.pr.headDivergedFromMergedPRAtOid : undefined).toBe(
       undefined
     )
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(2)
+    expect(metadataRequests).toHaveBeenCalledTimes(2)
   })
 })

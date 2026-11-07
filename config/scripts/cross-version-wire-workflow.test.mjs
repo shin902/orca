@@ -28,11 +28,9 @@ describe('fork cross-version compatibility releases', () => {
       readdirSync(directory)
         .filter((file) => file.endsWith('.unit.test.ts'))
         .flatMap((file) =>
-          [
-            ...readFileSync(join(directory, file), 'utf8').matchAll(
-              /(?:const \w*REF = |materializeReleaseCheckout\()'(v\d+\.\d+\.\d+)'/g
-            )
-          ].map((match) => match[1])
+          [...readFileSync(join(directory, file), 'utf8').matchAll(/'(v\d+\.\d+\.\d+)'/g)].map(
+            (match) => match[1]
+          )
         )
     )
     expect(refs.size).toBeGreaterThan(0)

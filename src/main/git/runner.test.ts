@@ -1,9 +1,6 @@
-// Why: covers two recent classifier fixes — Retry-After honoring on 429
-// (transient detection must propagate, not silently retry on 250ms cadence)
-// and stderr extraction from execFile rejections (err.message is unreliable).
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mergeGitConfigEnvProtocol } from '../../shared/git/commands/git-credential-prompt-env'
 import {
-  appendGitConfigEnv,
   extractExecError,
   isTransientGhError,
   nonInteractiveGitEnv,
@@ -13,22 +10,6 @@ import {
   redirectPortedHostnameToEnv,
   untranslatedGitOutputEnv
 } from './runner'
-import { mergeGitConfigEnvProtocol } from '../../shared/git-credential-prompt-env'
-
-// Reads git config injected via the GIT_CONFIG_COUNT/KEY/VALUE env protocol
-// back into a plain key→value map so tests can assert on it directly.
-function readGitConfigEnv(env: NodeJS.ProcessEnv): Record<string, string> {
-  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10)
-  const config: Record<string, string> = {}
-  for (let i = 0; i < count; i++) {
-    const key = env[`GIT_CONFIG_KEY_${i}`]
-    const value = env[`GIT_CONFIG_VALUE_${i}`]
-    if (key !== undefined && value !== undefined) {
-      config[key] = value
-    }
-  }
-  return config
-}
 
 describe('redirectPortedHostnameToEnv', () => {
   it('moves a ported --hostname into GITLAB_HOST and strips the flag', () => {
@@ -117,9 +98,6 @@ describe('isTransientGhError', () => {
   })
 
   it('does NOT retry 429 with Retry-After', () => {
-    // Why: when GitHub returns Retry-After, the server is telling us how long
-    // to wait. Retrying on our 250ms cadence just earns another 429 and burns
-    // the retry budget.
     expect(isTransientGhError('HTTP 429 Too Many Requests\nRetry-After: 60\n')).toBe(false)
   })
 
@@ -169,47 +147,6 @@ describe('extractExecError', () => {
   })
 })
 
-describe('appendGitConfigEnv', () => {
-  it('injects entries starting at count 0 when none exist', () => {
-    const env = appendGitConfigEnv({ PATH: '/usr/bin' }, [['credential.interactive', 'false']])
-    expect(env.GIT_CONFIG_COUNT).toBe('1')
-    expect(env.GIT_CONFIG_KEY_0).toBe('credential.interactive')
-    expect(env.GIT_CONFIG_VALUE_0).toBe('false')
-    expect(env.PATH).toBe('/usr/bin')
-  })
-
-  it('composes with an existing count instead of clobbering caller config', () => {
-    const env = appendGitConfigEnv(
-      { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.quotePath', GIT_CONFIG_VALUE_0: 'false' },
-      [['credential.guiPrompt', 'false']]
-    )
-    expect(env.GIT_CONFIG_COUNT).toBe('2')
-    // Existing entry preserved.
-    expect(env.GIT_CONFIG_KEY_0).toBe('core.quotePath')
-    expect(env.GIT_CONFIG_VALUE_0).toBe('false')
-    // New entry appended at the next index.
-    expect(env.GIT_CONFIG_KEY_1).toBe('credential.guiPrompt')
-    expect(env.GIT_CONFIG_VALUE_1).toBe('false')
-  })
-
-  it.each(['bogus', '-1', '0', String(Number.MAX_SAFE_INTEGER)])(
-    'does not overwrite dangling caller config when count is %s',
-    (count) => {
-      const original = {
-        GIT_CONFIG_COUNT: count,
-        GIT_CONFIG_KEY_0: 'user.key',
-        GIT_CONFIG_VALUE_0: 'caller-value'
-      }
-      expect(appendGitConfigEnv(original, [['credential.interactive', 'false']])).toEqual(original)
-    }
-  )
-
-  it('does not append to an incomplete indexed-config protocol', () => {
-    const original = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.key' }
-    expect(appendGitConfigEnv(original, [['credential.interactive', 'false']])).toEqual(original)
-  })
-})
-
 describe('mergeGitConfigEnvProtocol', () => {
   it('replaces inherited indexed config atomically when an override has a smaller count', () => {
     const env = mergeGitConfigEnvProtocol(
@@ -237,15 +174,9 @@ describe('mergeGitConfigEnvProtocol', () => {
 describe('promptGuardGitEnv credential-interactivity disable (STA-1292)', () => {
   it('disables the GCM GUI prompt without nuking the credential helper', () => {
     const env = promptGuardGitEnv({ PATH: '/usr/bin' })
-    // GCM: never show the GUI, but still serve cached credentials.
     expect(env.GCM_INTERACTIVE).toBe('never')
-    const config = readGitConfigEnv(env)
-    expect(config['credential.interactive']).toBe('false')
-    expect(config['credential.guiPrompt']).toBe('false')
-    // Regression guard: we must NOT clear the helper — that would break
-    // cached-credential auth for private repos.
-    expect(config['credential.helper']).toBeUndefined()
-    // Existing prompt guards remain intact.
+    // Scalar guards only: env scrubs can split an indexed config protocol (#26594).
+    expect(env.GIT_CONFIG_COUNT).toBeUndefined()
     expect(env.GIT_TERMINAL_PROMPT).toBe('0')
   })
 })
@@ -254,26 +185,29 @@ describe('nonInteractiveGitEnv credential-interactivity disable (STA-1292)', () 
   it('carries the credential-interactivity disable through from promptGuardGitEnv', () => {
     const env = nonInteractiveGitEnv({ PATH: '/usr/bin' })
     expect(env.GCM_INTERACTIVE).toBe('never')
-    const config = readGitConfigEnv(env)
-    expect(config['credential.interactive']).toBe('false')
-    expect(config['credential.guiPrompt']).toBe('false')
-    expect(config['credential.helper']).toBeUndefined()
-    // Its own BatchMode SSH guard is still applied and unaffected.
+    expect(env.GIT_CONFIG_COUNT).toBeUndefined()
     expect(env.GIT_SSH_COMMAND).toBe('ssh -o BatchMode=yes')
   })
 })
 
 describe('guard-env WSLENV forwarding (#7652)', () => {
   it('registers the guard vars in WSLENV on Windows so WSL-routed git imports them', () => {
-    const env = promptGuardGitEnv({ PATH: '/usr/bin' }, 'win32')
+    const env = promptGuardGitEnv(
+      {
+        PATH: '/usr/bin',
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.proxy',
+        GIT_CONFIG_VALUE_0: 'http://proxy.invalid'
+      },
+      'win32'
+    )
     const keys = (env.WSLENV ?? '').split(':')
     expect(keys).toContain('GIT_TERMINAL_PROMPT')
     expect(keys).toContain('GCM_INTERACTIVE')
+    // A caller's indexed config is forwarded as a complete set.
     expect(keys).toContain('GIT_CONFIG_COUNT')
     expect(keys).toContain('GIT_CONFIG_KEY_0')
     expect(keys).toContain('GIT_CONFIG_VALUE_0')
-    expect(keys).toContain('GIT_CONFIG_KEY_1')
-    expect(keys).toContain('GIT_CONFIG_VALUE_1')
     // Windows askpass paths are meaningless inside a distro.
     expect(keys).not.toContain('GIT_ASKPASS')
     expect(keys).not.toContain('SSH_ASKPASS')
@@ -310,7 +244,6 @@ describe('promptGuardShellEnv keeps the shell locale (#7652 x #7808)', () => {
     expect(env.GIT_TERMINAL_PROMPT).toBe('0')
     expect(env.GCM_INTERACTIVE).toBe('never')
     expect((env.WSLENV ?? '').split(':')).toContain('GIT_TERMINAL_PROMPT')
-    // The user's locale survives; no pins appear where none existed.
     expect(env.LC_ALL).toBe('ja_JP.UTF-8')
     expect(env.LANG).toBeUndefined()
     expect(env.LANGUAGE).toBeUndefined()
@@ -319,8 +252,6 @@ describe('promptGuardShellEnv keeps the shell locale (#7652 x #7808)', () => {
 
 describe('git env forces untranslated diagnostics (issue #7808)', () => {
   it('overrides an inherited non-English locale so stderr parsers keep working', () => {
-    // A gettext-enabled git under de_DE translates even the `fatal:` prefix,
-    // breaking isNoUpstreamError and every other stderr phrase match.
     const env = promptGuardGitEnv({ PATH: '/usr/bin', LC_ALL: 'de_DE.UTF-8' })
     expect(env.LC_ALL).toBe('en_US.UTF-8')
     expect(env.LANG).toBe('en_US.UTF-8')
@@ -341,9 +272,6 @@ describe('git env forces untranslated diagnostics (issue #7808)', () => {
 
 describe('redirectPortedHostnameToEnv WSLENV forwarding', () => {
   it('names GITLAB_HOST in WSLENV so it can cross into a distro', async () => {
-    // A WSL-routed glab only sees Windows variables listed in WSLENV; without
-    // the entry the ported host is silently dropped and glab talks to
-    // gitlab.com (#12557).
     const { redirectPortedHostnameToEnv } = await import('./runner')
     const { options } = redirectPortedHostnameToEnv(
       ['api', '--hostname', 'gitlab.example.com:8443'],

@@ -2,15 +2,15 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
+import { installFakeAppEnvironment } from '../../../config/scripts/test-runtime/environment/vitest-host-ports-setup'
 import { getDefaultVoiceSettings } from '../../shared/constants'
 import type { VoiceSettings } from '../../shared/speech-types'
 import { SPEECH_RECOGNIZER_DIR_ENV } from '../../shared/speech-recognizer-package'
 import { isLocalSpeechModel, SPEECH_MODEL_CATALOG } from '../speech/model-catalog'
 import { setSpeechServiceFactories } from '../speech/speech-runtime-service'
 import { LOCAL_SPEECH_UNAVAILABLE_ERROR } from '../speech/stt-worker-paths'
-import { RuntimeMobileDictationController } from '../runtime/runtime-mobile-dictation-controller'
-import { RuntimeMobileSpeechCatalog } from '../runtime/runtime-mobile-speech-catalog'
+import { RuntimeMobileDictationController } from '../runtime/speech/runtime-mobile-dictation-controller'
+import { RuntimeMobileSpeechCatalog } from '../runtime/speech/runtime-mobile-speech-catalog'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import { orcadSpeechServiceFactories } from './orcad-speech-services'
 
@@ -26,7 +26,6 @@ afterEach(() => {
 function orcadHost(voice: Partial<VoiceSettings>) {
   const userData = mkdtempSync(join(tmpdir(), 'orcad-speech-'))
   roots.push(userData)
-  // A packaged host with no Electron resources tree and no recognizer handed to it.
   installFakeAppEnvironment({ isPackaged: () => true, getPath: () => userData })
   setSpeechServiceFactories(orcadSpeechServiceFactories)
   let settings = { voice: { ...getDefaultVoiceSettings(), ...voice } }
@@ -56,7 +55,7 @@ describe('speech on orcad (#31174)', () => {
     )
   })
 
-  // Every mobile build opens the setup sheet on `voice_model_not_ready:`, so older phones recover.
+  // Preserve the setup-sheet error contract for older mobile clients.
   it('sends a phone with an on-device model selected to the setup sheet', async () => {
     const local = SPEECH_MODEL_CATALOG.find(isLocalSpeechModel)
     const store = orcadHost({ enabled: true, sttModel: local!.id })

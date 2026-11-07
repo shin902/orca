@@ -3,15 +3,14 @@ import { useRef } from 'react'
 import { ShieldQuestion, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import { NativeChatMarkdown } from './NativeChatMarkdown'
-import { approvalBlockedPathToShow } from '../../../../shared/agent-session-approval-blocked-path'
+import { approvalBlockedPathToShow } from '../../../../shared/agent-session/agent-session-approval-blocked-path'
 import {
   isNewerApprovalSubject,
   isPlanApprovalSubject
-} from '../../../../shared/agent-session-approval-subject'
+} from '../../../../shared/agent-session/agent-session-approval-subject'
 import { NativeChatCodeBlock } from './NativeChatCodeBlock'
-import type { ChatApproval } from './native-chat-interactive-prompt'
+import type { ChatApproval } from '../../../../shared/native-chat/input/native-chat-interactive-prompt'
 import { NativeChatPromptCollapseToggle } from './NativeChatPromptCollapse'
 import { useNativeChatPromptCardFocus } from './use-native-chat-prompt-card-focus'
 
@@ -26,25 +25,16 @@ export type NativeChatApprovalCardProps = {
   /** A choice is being delivered: the options wait for its answer. */
   isSubmitting?: boolean
   shouldFocus?: boolean
-  /** A plan body renders as markdown; these make its file paths clickable. */
-  onLinkClick?: CommentMarkdownLinkClickHandler
-  allowFileUriLinks?: boolean
 }
 
-/**
- * Native renderer for an agent tool-approval (PermissionRequest) as an
- * Allow/Deny card. PTY callers supply literal replies while structured callers
- * supply journal option IDs. The first option gets the primary styling.
- */
+/** PTY options are literal replies; structured options are journal ids. Style the first option as primary. */
 export function NativeChatApprovalCard({
   approval,
   onChoose,
   onCancel,
   onCollapse,
   isSubmitting = false,
-  shouldFocus = false,
-  onLinkClick,
-  allowFileUriLinks = false
+  shouldFocus = false
 }: NativeChatApprovalCardProps): React.JSX.Element {
   const cardRef = useRef<HTMLDivElement>(null)
   const neededPath = approvalBlockedPathToShow(approval)
@@ -62,7 +52,7 @@ export function NativeChatApprovalCard({
 
   return (
     <SecuritySurface>
-      <div className="min-h-0 shrink overflow-hidden bg-chat-canvas">
+      <div className="min-h-0 shrink overflow-hidden bg-chat-pane">
         <div className="mx-auto flex h-full min-h-0 max-h-full w-full max-w-(--chat-content-max-width) px-3 pt-2 pb-1 sm:px-4">
           <div
             ref={cardRef}
@@ -137,9 +127,7 @@ export function NativeChatApprovalCard({
                       variant="document"
                       className="text-sm text-chat-foreground"
                       renderCodeBlock={NativeChatCodeBlock}
-                      {...(onLinkClick ? { onLinkClick } : {})}
-                      allowFileUriLinks={allowFileUriLinks}
-                      linkifyFilePaths={onLinkClick !== undefined}
+                      linkifyFilePaths
                     />
                     {approval.subject.filePath ? (
                       <p className="mt-2 break-all">
@@ -181,7 +169,7 @@ export function NativeChatApprovalCard({
                     'rounded-md px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
                     i === 0
                       ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                      : 'border border-border bg-background text-foreground hover:bg-accent'
+                      : 'border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
                   {opt.label}

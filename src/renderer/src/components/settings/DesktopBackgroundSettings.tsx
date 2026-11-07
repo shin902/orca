@@ -9,8 +9,8 @@ import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { NumberField } from './SettingsFormControls'
-import { SearchableSetting } from './SearchableSetting'
+import { NumberField } from './form-controls/SettingsFormControls'
+import { SearchableSetting } from './section-layout/SearchableSetting'
 
 export function DesktopBackgroundSettings({
   settings,
