@@ -12,7 +12,8 @@ on:
         default: false
       runner:
         type: string
-        default: blacksmith-8vcpu-ubuntu-2404
+        # Forks have no Blacksmith runners; callers there fall back to the hosted default below.
+        default: ${{ github.repository == 'stablyai/orca' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     outputs:
       supported:
         value: ${{ jobs.bundle.outputs.supported }}
