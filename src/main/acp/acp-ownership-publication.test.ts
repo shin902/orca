@@ -13,7 +13,7 @@ import { AcpItemOwnership } from './acp-item-ownership'
 import { retainedCollectionEntries } from './acp-ownership-test-support'
 import { parseAgentJournalItemKey } from '../../shared/agent-session/journal/agent-session-journal-item-key'
 import { agentJournalTurnBody } from '../../shared/agent-session/lifecycle/agent-session-turn-record'
-import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/host/testing/structured-agent-session-logger-test-support'
 
 afterEach(async () => {
   vi.restoreAllMocks()
