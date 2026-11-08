@@ -1000,7 +1000,7 @@ jobs:
     timeout-minutes: 180
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
-      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.252
+      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.253
 
     steps:
       # Fetch tags/full history for newest-release skew; shallow unit shards cannot supply it.
