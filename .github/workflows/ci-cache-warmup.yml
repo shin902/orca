@@ -72,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [blacksmith-4vcpu-ubuntu-2404, ubuntu-24.04]
+        runner: ${{ github.repository == 'stablyai/orca' && fromJSON('["blacksmith-4vcpu-ubuntu-2404", "ubuntu-24.04"]') || fromJSON('["ubuntu-24.04"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     env:
