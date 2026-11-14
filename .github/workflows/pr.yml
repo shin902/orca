@@ -339,7 +339,7 @@ jobs:
           PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
           # Review the fork delta, not unchanged code imported from the stable release.
-          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && 'a162e08b29b2883b02d8a0dfcc99e26c80b2cfe7' || '' }}
+          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && 'c91a7a6ee3dc76090cafb33943961ae2235246d6' || '' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
           node config/scripts/preflight/changed-checks/check-changed-code-quality.mjs "${{ github.event.pull_request.base.sha }}"
@@ -348,7 +348,7 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         env:
           # Review the fork delta, not unchanged code imported from the stable release.
-          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && 'a162e08b29b2883b02d8a0dfcc99e26c80b2cfe7' || '' }}
+          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && 'c91a7a6ee3dc76090cafb33943961ae2235246d6' || '' }}
         run: |
           if [ -n "$ORCA_REACT_DOCTOR_BASE" ]; then
             git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_REACT_DOCTOR_BASE"

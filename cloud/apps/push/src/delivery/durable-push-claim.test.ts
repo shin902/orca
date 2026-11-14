@@ -116,6 +116,22 @@ it.skipIf(!durablePushTestDatabaseUrl)(
   }
 )
 
+it('isolates device-scope locks held by unrelated fixtures', async () => {
+  const first = await fixture()
+  const second = await fixture()
+  await first.store.accept('host', 'phone', notification(1))
+  await second.store.accept('host', 'phone', notification(2))
+  const paused = pauseAfter(first.db, DEVICE_HEAD_SQL)
+  const holding = new DurablePushStore(paused.wrapped, first.clock).claim()
+  await paused.atCandidate
+  try {
+    expect((await within(second.store.claim(), 2_000))?.notification.notificationSeq).toBe(2)
+  } finally {
+    paused.release()
+    await holding
+  }
+})
+
 it.skipIf(!durablePushTestDatabaseUrl)(
   'keeps a device exclusive when an earlier-sorting row lands mid-claim',
   async () => {
