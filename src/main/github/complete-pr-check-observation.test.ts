@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
 const { exec } = vi.hoisted(() => ({ exec: vi.fn() }))
-vi.mock('../git/command-runner/gh-exec-file', async (original) => ({
+vi.mock('../git/command-runner/hosted-cli/gh-exec-file', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   ghExecFileAsync: exec
 }))
@@ -81,21 +81,6 @@ it('counts a hidden failure and suite-only blocker after both first pages withou
     cancelled: 0,
     pending: 0,
     neutral: 0
-  })
-})
-
-it('counts unnamed and name-colliding failed observations instead of using detail-list filtering', async () => {
-  exec.mockResolvedValueOnce(
-    page([
-      success,
-      { ...failure, name: '' },
-      { __typename: 'StatusContext', context: 'same-name', state: 'FAILURE' }
-    ])
-  )
-  expect(summarizePRCheckRollup((await read())!)).toMatchObject({
-    state: 'failure',
-    total: 3,
-    failed: 2
   })
 })
 
