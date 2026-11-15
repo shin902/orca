@@ -1,0 +1,10 @@
+# Render-path translate()/getIntlLocale() calls in components and hooks, per file.
+# This is a RATCHET: counts may only go DOWN. Use useTranslate()/useIntlLocale() from
+# @/i18n/use-translate. Prune after a fix: pnpm check:render-path-translate-ratchet --prune
+2 src/renderer/src/components/agent/AgentLaunchPromptComposer.tsx
+5 src/renderer/src/components/automations/external/use-external-automation-actions.ts
+1 src/renderer/src/components/diff-comments/useDiffCommentDecorator.tsx
+2 src/renderer/src/components/editor/markdown-preview/render-tree/use-markdown-preview-components.tsx
+18 src/renderer/src/components/settings/DesktopBackgroundSettings.tsx # fork-carried file absent from upstream v1.4.258 baseline; count unchanged since v1.4.251
+1 src/renderer/src/components/tab-group/useTabGroupCreationCommands.ts
+3 src/renderer/src/components/worktree-creation/PendingNativeChatCreation.tsx

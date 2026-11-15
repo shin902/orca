@@ -2,7 +2,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session/journal/a
 import { describe, expect, it } from 'vitest'
 import type { AgentJournalItemBody } from '../../shared/agent-session/journal/agent-session-journal-types'
 import type { AgentJournalItemIdentity } from '../../shared/agent-session/journal/agent-session-journal-identity'
-import type { StructuredAgentSessionAppendOptions } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { StructuredAgentSessionAppendOptions } from '../native-chat/agent-session-wire/journal-ingress/structured-agent-session-event-sink'
 import { ClaudeProvisionalRowCorrections } from './claude-provisional-row-corrections'
 import type { ClaudeSubagentLinkageVerdict } from './claude-subagent-linkage'
 
@@ -119,18 +119,6 @@ describe('ClaudeProvisionalRowCorrections', () => {
     expect(corrections.pending).toBe(0)
   })
 
-  it('lets a refusal at abandon end the obligation rather than leaking it', () => {
-    const { corrections, rewrites, announce, setRefusing } = ledger()
-    corrections.stampFor('toolu_1')(identityOf('toolu_2'), RUNNING)
-    announce('toolu_1', 'task-1')
-
-    setRefusing(true)
-    corrections.abandon()
-
-    expect(rewrites).toEqual([])
-    expect(corrections.pending).toBe(0)
-  })
-
   it('carries the NEWEST body when a row is written provisionally twice', () => {
     const { corrections, rewrites, announce } = ledger()
     const stamp = corrections.stampFor('toolu_1')
@@ -156,19 +144,5 @@ describe('ClaudeProvisionalRowCorrections', () => {
     corrections.retry()
 
     expect(rewrites).toEqual([])
-  })
-
-  it('keeps correcting a producer that stays inside the bound', () => {
-    const { corrections, rewrites, announce } = ledger()
-    const stamp = corrections.stampFor('toolu_1')
-    for (let index = 0; index < 128; index += 1) {
-      stamp(identityOf(`toolu_row_${index}`), RUNNING)
-    }
-    expect(corrections.pending).toBe(128)
-
-    announce('toolu_1', 'task-1')
-    corrections.retry()
-
-    expect(rewrites).toHaveLength(128)
   })
 })

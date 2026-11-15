@@ -1,6 +1,6 @@
-import { federationRelayPrefix } from '../../../main/runtime/orchestration/federation-relay-prefix'
+import { federationRelayPrefix } from '../../../main/runtime/orchestration/federation/relay/federation-relay-prefix'
 import * as memoryLimits from '../remote-runtime-memory-limits'
-import { sendRemoteRuntimeRequest } from '../remote-runtime-client'
+import { sendRemoteRuntimeRequestOnSocket } from '../requests/remote-runtime-request-socket'
 import {
   pairedRuntimeConnectionFromOffer,
   type PairedRuntimeConnection
@@ -20,13 +20,13 @@ import {
 import { RemoteRuntimeRequestConnection } from './remote-runtime-request-connection'
 import { remoteRuntimeClientCapabilities } from '../remote-runtime-client-capabilities'
 import { createFakeSpawnedChild } from '../../__fixtures__/fake-spawned-child'
-import * as commandResolution from '../../../main/git/command-runner/git-command-resolution'
+import * as commandResolution from '../../../main/git/command-runner/host-routing/git-command-resolution'
 import * as gitRunner from '../../../main/git/command-runner/git-exec-file'
 import {
   acquireGitAdmission,
   _gitAdmissionSnapshotForTests,
   _resetGitAdmissionForTests
-} from '../../../main/git/command-runner/git-subprocess-admission'
+} from '../../../main/git/command-runner/admission/git-subprocess-admission'
 import { GitAdmissionScheduler } from '../../git/admission/git-admission-scheduler'
 
 const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }))
@@ -75,14 +75,16 @@ describe('RemoteRuntimeRequestConnection', () => {
     }))
     const params = { dispatchId: 'dispatch_remote', items }
     let selectedThrough = 0
-    const response = await sendRemoteRuntimeRequest(
+    const response = await sendRemoteRuntimeRequestOnSocket(
       server.pairing,
       'orchestration.federationImport',
       params,
       5000,
       { orchestrationRequestId: 'before' },
       undefined,
+      undefined,
       [],
+      undefined,
       federationRelayPrefix('dispatch_remote', items, (last) => {
         selectedThrough = last
       })
@@ -240,7 +242,12 @@ async function createServer(
       }
       const frame = data.toString()
       if (!sharedKey) {
-        const hello = JSON.parse(frame) as { type: string; publicKeyB64: string }
+        const hello: { type: string; publicKeyB64?: string } = JSON.parse(frame)
+        if (!hello.publicKeyB64) {
+          // Legacy-only host: refuses a v2 hello the way hosts before v2 do.
+          ws.close(4001, 'Invalid e2ee_hello')
+          return
+        }
         const clientPublicKey = publicKeyFromBase64(hello.publicKeyB64)
         sharedKey = deriveSharedKey(serverKeyPair.secretKey, clientPublicKey)
         ws.send(JSON.stringify({ type: 'e2ee_ready' }))
