@@ -13,7 +13,8 @@ import {
   type WorkerApprovalPayload
 } from '../../../../../shared/orchestration/approvals/worker-approval-payload'
 
-/** The outcome of a chat prompt Orca answered: its reason is told only when it went to the worker as mail. */
+/** The outcome of a chat prompt Orca answered: its reason is told only when it went to the worker
+ *  as mail. */
 export function chatAnswerOutcome(input: {
   by: WorkerApprovalAnswerer
   decision: WorkerApprovalDecision
@@ -84,10 +85,12 @@ export function workerApprovalPayload(input: {
     worker: input.worker,
     summary: {
       title: item.displayName ? `Allow ${item.displayName}?` : item.title,
+      ...(item.toolName ? { tool: item.toolName } : {}),
       detail,
       reason: item.decisionReason ?? null
     },
-    allowedActions: workerApprovalActions(item.options)
+    allowedActions: workerApprovalActions(item.options),
+    ...(item.personOnly ? { personOnly: true } : {})
   }
   return outcome ? closedApproval(open, outcome) : open
 }

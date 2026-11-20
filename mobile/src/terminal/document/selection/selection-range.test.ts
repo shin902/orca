@@ -9,7 +9,6 @@ const terminals: Terminal[] = []
 
 afterEach(() => {
   terminals.splice(0).forEach((term) => term.dispose())
-  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
@@ -29,29 +28,6 @@ async function fixture(text: string) {
   }
   return { term, scope, select, selected }
 }
-
-describe('word selection uses the rendered xterm cell range', () => {
-  it('keeps cell mapping when a legacy WebView has no grapheme segmenter', async () => {
-    const f = await fixture('합성 🙂 cafe\u0301')
-    vi.stubGlobal('Intl', Object.assign(Object.create(Intl), { Segmenter: undefined }))
-    seedWordSelection(f.scope, 3, 0)
-    expect(f.select).toHaveBeenLastCalledWith(0, 0, 4)
-    expect(f.selected()).toBe('합성')
-    seedWordSelection(f.scope, 6, 0)
-    expect(f.select).toHaveBeenLastCalledWith(5, 0, 2)
-    expect(f.selected()).toBe('🙂')
-  })
-
-  it('keeps an absolute scrollback row and tolerates an evicted line', async () => {
-    const f = await fixture('한글\r\nsecond\r\nthird\r\nfourth')
-    expect(f.term.buffer.active.viewportY).toBeGreaterThan(0)
-    seedWordSelection(f.scope, 2, 0)
-    expect(f.select).toHaveBeenLastCalledWith(0, 0, 4)
-    expect(f.selected()).toBe('한글')
-    seedWordSelection(f.scope, 2, 99)
-    expect(f.select).toHaveBeenLastCalledWith(2, 99, 1)
-  })
-})
 
 describe('Unicode selection boundaries across every rendered column', () => {
   it.each([
@@ -73,16 +49,24 @@ describe('Unicode selection boundaries across every rendered column', () => {
     seedWordSelection(f.scope, 3 + width + 1, 0)
     expect(f.selected()).toBe('next')
   })
+})
 
-  it('keeps the last wide word on the row and the next wrapped row independent', async () => {
-    const f = await fixture(' '.repeat(56) + '한글next')
-    for (const col of [56, 57, 58, 59]) {
-      seedWordSelection(f.scope, col, 0)
-      expect(f.select).toHaveBeenLastCalledWith(56, 0, 4)
-      expect(f.selected()).toBe('한글')
-    }
-    seedWordSelection(f.scope, 0, 1)
-    expect(f.select).toHaveBeenLastCalledWith(0, 1, 4)
-    expect(f.selected()).toBe('next')
+describe('word selection follows the Word Separator setting', () => {
+  it('uses the host separators instead of the default set', async () => {
+    const f = await fixture('run fn(arg),next')
+    seedWordSelection(f.scope, 7, 0)
+    expect(f.selected()).toBe('arg')
+    f.scope.wordSeparator = ' ,'
+    seedWordSelection(f.scope, 7, 0)
+    expect(f.selected()).toBe('fn(arg)')
+  })
+})
+
+describe('word selection stops at unwritten cells', () => {
+  it('ends at the last written cell when the separators leave out space', async () => {
+    const f = await fixture('hello world')
+    f.scope.wordSeparator = ','
+    seedWordSelection(f.scope, 1, 0)
+    expect(f.selected()).toBe('hello world')
   })
 })

@@ -15,11 +15,11 @@ import type {
   RuntimeVisibleTerminalState
 } from '../records/runtime-terminal-state-records'
 import type { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal/protocol/input-modes/terminal-kitty-keyboard-mode-tracker'
-import type { PtyProviderBufferSnapshot } from '../../../providers/pty-provider-contract'
+import type { PtyProviderBufferSnapshot } from '../../../providers/pty/provider-contract'
 import type { createAgentStatusOscProcessor } from '../../../../shared/agent-status/transport/agent-status-osc'
 import { RuntimeTerminalViewSubscribers } from '../view/runtime-terminal-view-subscribers'
 import { MainDaemonAttachments } from './main-daemon-attachments'
-import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { parseAppSshPtyId } from '../../../../shared/remote-runtime/ssh/ssh-pty-id'
 
 export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWithStopRequestedPtyIds {
   protected readonly terminalIdentity = new TerminalIdentitySource(this.crewChanges.notify)
@@ -102,6 +102,9 @@ export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWit
   protected providerSequenceInitializedPtys = new Set<string>()
 
   protected providerSequenceOffsetByPtyId = new Map<string, number>()
+
+  /** The daemon's output count when main reattached to a running process, in the daemon's numbering. */
+  protected reattachedProviderSequenceByPtyId = new Map<string, number>()
 
   protected providerSnapshotPreferredPtys = new Set<string>()
 
