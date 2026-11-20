@@ -25,7 +25,7 @@ describe('fork cross-version compatibility releases', () => {
     )
     const directory = join('tests', 'e2e', 'cross-version-wire')
     const refs = new Set(
-      readdirSync(directory)
+      readdirSync(directory, { recursive: true })
         .filter((file) => file.endsWith('.unit.test.ts'))
         .flatMap((file) =>
           [...readFileSync(join(directory, file), 'utf8').matchAll(/'(v\d+\.\d+\.\d+)'/g)].map(
