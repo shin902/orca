@@ -1,12 +1,13 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { BrowserError } from '../../browser-error'
-import { assertClipboardTextWriteWithinLimitWithYield } from '../../../../shared/clipboard-text'
-import { withTimeout } from '../../../../shared/promise-timeout-fallback'
+import { assertClipboardTextWriteWithinLimitWithYield } from '../../../../shared/clipboard/clipboard-text'
+import { withTimeout } from '../../../../shared/concurrency/promise-timeout-fallback'
 import { AGENT_BROWSER_CLIPBOARD_WRITE_MAX_BYTES } from '../protocol/agent-browser-text-argument-budget'
 import type {
   BrowserBackResult,
-  BrowserReloadResult
+  BrowserReloadResult,
+  BrowserStopResult
 } from '../../../../shared/browser/runtime/runtime-browser-contracts'
 import { AgentBrowserBridgeMouseCommands } from './agent-browser-bridge-mouse-commands'
 import {
@@ -17,7 +18,10 @@ import {
   cancelBrowserPasskeyRequests,
   getBrowserPasskeyRequest
 } from '../../webauthn/browser-passkey-requests'
-import { formatBrowserPasskeyRequest } from '../../../../shared/browser-passkey-request'
+import type { BrowserPageZoomDirection } from '../../../../shared/browser/site-settings/browser-page-zoom'
+import type { BrowserPageSiteDisplay } from '../../../../shared/browser/site-settings/browser-site-display'
+import { formatBrowserPasskeyRequest } from '../../../../shared/browser/prompts/browser-passkey-request'
+import { browserGuestHasNothingToReload } from '../../../../shared/browser/guest-lifecycle/browser-guest-reloadability'
 import { cancelBrowserWebAuthnAccountRequests } from '../../webauthn/browser-webauthn-account-picker'
 import { captureRemoteCliBrowserRevocation } from '../../../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 import {
@@ -225,14 +229,55 @@ export abstract class AgentBrowserBridgeUtilityCommands extends AgentBrowserBrid
     })
   }
 
-  async reload(worktreeId?: string, browserPageId?: string): Promise<BrowserReloadResult> {
+  // Not queued: zoom is the person's view of the page, not an action an agent's command waits on.
+  zoom(
+    direction: BrowserPageZoomDirection,
+    worktreeId?: string,
+    browserPageId?: string
+  ): BrowserPageSiteDisplay | null {
+    this.assertCommandAdmission()
+    const assertNotRevoked = captureRemoteCliBrowserRevocation()
+    const { webContentsId } = this.resolveCommandTarget(worktreeId, browserPageId)
+    assertNotRevoked(webContentsId)
+    return this.browserManager.zoomGuestPage(webContentsId, direction)
+  }
+
+  // Not queued: the load it stops may be the queued command ahead of it, such as a reload.
+  stop(worktreeId?: string, browserPageId?: string): BrowserStopResult {
+    this.assertCommandAdmission()
+    const assertNotRevoked = captureRemoteCliBrowserRevocation()
+    const { webContentsId } = this.resolveCommandTarget(worktreeId, browserPageId)
+    assertNotRevoked(webContentsId)
+    const wc = this.getWebContents(webContentsId)
+    if (!wc) {
+      throw new BrowserError('browser_no_tab', 'Tab is no longer available')
+    }
+    wc.stop()
+    return { url: wc.getURL(), title: wc.getTitle() }
+  }
+
+  async reload(
+    worktreeId?: string,
+    browserPageId?: string,
+    { ignoreCache = false }: { ignoreCache?: boolean } = {}
+  ): Promise<BrowserReloadResult> {
     // Reload directly because a process swap can destroy the helper session mid-command.
     return this.enqueueInertAction(worktreeId, browserPageId, async (_sessionName, target) => {
       const wc = this.getWebContents(target.webContentsId)
       if (!wc) {
         throw new BrowserError('browser_no_tab', 'Tab is no longer available')
       }
-      wc.reload()
+      if (browserGuestHasNothingToReload({ url: wc.getURL(), loading: wc.isLoading() })) {
+        throw new BrowserError(
+          'browser_error',
+          'Nothing to reload: this page never finished loading. Navigate to its URL instead.'
+        )
+      }
+      if (ignoreCache) {
+        wc.reloadIgnoringCache()
+      } else {
+        wc.reload()
+      }
       await new Promise<void>((resolve) => {
         let settled = false
         let fallbackTimer: ReturnType<typeof setTimeout> | null = null
@@ -261,6 +306,14 @@ export abstract class AgentBrowserBridgeUtilityCommands extends AgentBrowserBrid
           fallbackTimer.unref()
         }
       })
+      // did-fail-load also ends the wait; the page then shows an error document, not a reload.
+      const loadError = this.browserManager.getBrowserPageLoadError(target.browserPageId)
+      if (loadError) {
+        throw new BrowserError(
+          'browser_error',
+          `Reload failed: ${loadError.description} (${loadError.code})`
+        )
+      }
       return { url: wc.getURL(), title: wc.getTitle() }
     })
   }

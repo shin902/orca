@@ -3,11 +3,12 @@ import {
   useLayoutEffect,
   useRef,
   type Dispatch,
+  type KeyboardEvent,
   type KeyboardEventHandler,
   type SetStateAction
 } from 'react'
-import type { ComposerAutocomplete } from '../../../../../../shared/native-chat/input/native-chat-composer-autocomplete'
-import type { NativeChatPickerItem } from '../../../../../../shared/native-chat/input/native-chat-picker-items'
+import type { ComposerAutocomplete } from '../../../../../../shared/native-chat/input/composer/native-chat-composer-autocomplete'
+import type { NativeChatPickerItem } from '../../../../../../shared/native-chat/input/composer/native-chat-picker-items'
 import { isMacPlatform } from '../../pane/routing/native-chat-shortcut'
 import type { NativeChatMentionFiles } from '../pickers/use-native-chat-mention-files'
 import type { NativeChatComposerSendIntent } from '../submit/native-chat-composer-send-intent'
@@ -22,6 +23,8 @@ export type UseNativeChatComposerKeyDownArgs = {
   autocomplete: ComposerAutocomplete
   mentionFiles: NativeChatMentionFiles
   completeMention: (path: string) => void
+  /** The `@` list's own keys first (a bot's chats, a pill's chat list); true when it took the key. */
+  mentionKey?: (event: KeyboardEvent<HTMLElement>, activeSuggestion: number) => boolean
   activeSuggestion: number
   draft: string
   /** Image chips count as composer content, like typed text. */
@@ -31,7 +34,8 @@ export type UseNativeChatComposerKeyDownArgs = {
   completePickerItem: (item: NativeChatPickerItem) => void
   dispatchPickerCommand: (item: Extract<NativeChatPickerItem, { kind: 'command' }>) => void
   dismissPicker: (triggerKey: string) => void
-  interrupt: () => void
+  /** Unset while Escape may not stop the turn; the Stop button still does. */
+  interrupt: (() => void) | undefined
   send: (intent?: NativeChatComposerSendIntent) => void
   /** Cmd/Ctrl+Shift+Enter steers the head queued card, whatever the composer holds. */
   steerHead?: (() => boolean) | undefined
@@ -46,6 +50,7 @@ export function useNativeChatComposerKeyDown({
   autocomplete,
   mentionFiles,
   completeMention,
+  mentionKey,
   activeSuggestion,
   draft,
   hasAttachments = false,
@@ -78,6 +83,9 @@ export function useNativeChatComposerKeyDown({
       // An open layer that keeps focus here, like the context card, already spent this Escape closing
       // itself; a layer around the composer (a launch panel) leaves an open picker to take it.
       if (event.key === 'Escape' && event.defaultPrevented && autocomplete.mode === 'none') {
+        return
+      }
+      if (mentionKey?.(event, activeSuggestion)) {
         return
       }
 
@@ -125,7 +133,7 @@ export function useNativeChatComposerKeyDown({
 
       if (event.key === 'Escape') {
         event.preventDefault()
-        interrupt()
+        interrupt?.()
         return
       }
       const modified = event.key === 'Enter' && (isMacPlatform() ? event.metaKey : event.ctrlKey)
@@ -185,6 +193,7 @@ export function useNativeChatComposerKeyDown({
       activeSuggestion,
       autocomplete,
       completeMention,
+      mentionKey,
       completePickerItem,
       dismissPicker,
       dispatchPickerCommand,

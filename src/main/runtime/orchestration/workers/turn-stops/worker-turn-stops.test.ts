@@ -3,9 +3,9 @@ import type { AgentPaneChange } from '../../../../agent-hooks/observations/agent
 import type { AgentStatusIpcPayload } from '../../../../../shared/agent-status/contracts/agent-status-ipc-payload'
 import type { AgentSessionTurnCompletionEvent } from '../../../../../shared/agent-session/view/agent-session-turn-completion-wire'
 import { makePaneKey } from '../../../../../shared/workspace-layout/stable-pane-id'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
-import { formatOrcaSessionAddress } from '../../../../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../../../../shared/orca-session-address-test-fixture'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host/execution-host'
+import { formatOrcaSessionAddress } from '../../../../../shared/agent-session/identity/orca-session-address'
+import { testOrcaSessionId } from '../../../../../shared/agent-session/identity/orca-session-address-test-fixture'
 import { chatWorkerTurnStopReporter } from './chat-worker-turn-stops'
 import { OrchestrationDb } from '../../db/orchestration-db'
 import '../../db/contract-constants'
@@ -66,7 +66,16 @@ function moved(from: 'working' | 'done', to: 'done' | 'needs-you'): AgentPaneCha
   }
 }
 
-function terminal(ctx: ReturnType<typeof setup>, current: { row: AgentStatusIpcPayload }) {
+function terminal(
+  ctx: ReturnType<typeof setup>,
+  current: { row: AgentStatusIpcPayload },
+  overrides: Partial<
+    Pick<
+      ConstructorParameters<typeof TerminalWorkerTurnStops>[0],
+      'takeOpenApproval' | 'markApprovalReported' | 'setTimer' | 'readScreen'
+    >
+  > = {}
+) {
   return new TerminalWorkerTurnStops({
     ...ctx.deps,
     readHookRow: () => current.row,
@@ -77,17 +86,29 @@ function terminal(ctx: ReturnType<typeof setup>, current: { row: AgentStatusIpcP
     getHandle: () => HANDLE,
     getProcessIncarnation: () => null,
     takeOpenApproval: async () => null,
-    readScreen: async () => ({
-      handle: HANDLE,
-      status: 'running',
-      tail: ['■ Selected model is at capacity. Please try a different model.'],
-      truncated: false,
-      nextCursor: null
-    })
+    markApprovalReported: () => {},
+    readScreen: async () =>
+      screen(['■ Selected model is at capacity. Please try a different model.']),
+    ...overrides
   })
 }
 
+function screen(tail: string[]) {
+  return { handle: HANDLE, status: 'running' as const, tail, truncated: false, nextCursor: null }
+}
+
 const settle = () => new Promise((resolve) => setImmediate(resolve))
+
+/** The coordinator writes to the worker's Dispatch, and the worker takes the mail. */
+function writeAndTake(ctx: ReturnType<typeof setup>) {
+  const mail = ctx.db.insertMessage({
+    from: 'term_coordinator',
+    to: `dispatch:${ctx.dispatch.id}`,
+    subject: 'Keep going',
+    runId: ctx.run.id
+  })
+  ctx.db.markAsRead([mail.id])
+}
 
 describe('terminal worker turn stops', () => {
   it('drops a stop whose Dispatch was replaced before it was reported', async () => {
@@ -109,6 +130,33 @@ describe('terminal worker turn stops', () => {
     createRootDispatch(ctx.db, followUp.id, HANDLE, PANE)
     await settle()
     expect(ctx.mail()).toHaveLength(0)
+  })
+
+  it("reports a finish's reply that its transcript read adds within the quiet window", async () => {
+    const ctx = setup()
+    const current = { row: hookRow({ state: 'working' }) }
+    const quiet: (() => void)[] = []
+    const stops = terminal(ctx, current, {
+      setTimer: (run) => {
+        quiet.push(run)
+        return { cancel: () => {} }
+      }
+    })
+    stops.observe({
+      kind: 'observed',
+      paneKey: PANE,
+      workspace: { worktreeId: 'repo::/tmp/wt', sshHostId: null },
+      phase: 'working',
+      at: 1
+    })
+    current.row = hookRow({})
+    stops.observe(moved('working', 'done'))
+    current.row = hookRow({ lastAssistantMessage: 'All tests pass.' })
+    for (const run of quiet.splice(0)) {
+      run()
+    }
+    await settle()
+    expect(ctx.mail().map((m) => m.body)).toEqual([expect.stringContaining('All tests pass.')])
   })
 
   it('never mails a capability or credential carried in why a worker went away', () => {
@@ -178,6 +226,78 @@ describe('terminal worker turn stops', () => {
     stop('turn-3', after)
     expect(ctx.mail()).toHaveLength(2)
   })
+
+  it('reports every idle stop after a write, though the write landed before the last report', async () => {
+    const ctx = setup()
+    const current = { row: hookRow({ state: 'working', stateStartedAt: 100 }) }
+    const quiet: (() => void)[] = []
+    const stops = terminal(ctx, current, {
+      setTimer: (run) => {
+        quiet.push(run)
+        return { cancel: () => {} }
+      }
+    })
+    const turn = async (stateStartedAt: number, during?: () => void) => {
+      current.row = hookRow({ state: 'working', stateStartedAt: stateStartedAt - 1 })
+      stops.observe({
+        kind: 'observed',
+        paneKey: PANE,
+        workspace: { worktreeId: 'repo::/tmp/wt', sshHostId: null },
+        phase: 'working',
+        at: 1
+      })
+      current.row = hookRow({ stateStartedAt, lastAssistantMessage: 'Paused.' })
+      stops.observe(moved('working', 'done'))
+      // The coordinator's write lands in the quiet window, before Orca sees the worker resume.
+      during?.()
+      for (const run of quiet.splice(0)) {
+        run()
+      }
+      await settle()
+    }
+    await turn(200, () => writeAndTake(ctx))
+    await turn(300)
+    expect(ctx.mail()).toHaveLength(2)
+    writeAndTake(ctx)
+    await turn(400)
+    // Idle again with no new write: already told.
+    await turn(500)
+    expect(ctx.mail().map((m) => m.subject)).toEqual(
+      Array(3).fill('Worker stopped without reporting')
+    )
+  })
+  it("reports a background subagent's permission prompt with the dialog Claude paints after its hook", async () => {
+    const ctx = setup()
+    const current = { row: hookRow({ agentType: 'claude', state: 'working', stateStartedAt: 100 }) }
+    // The lead ended its turn waiting on the subagent; its screen before and after the dialog painted.
+    const idle = [
+      "⏺ Waiting for the reviewer's report.",
+      '✻ Waiting for 1 background agent to finish',
+      '❯',
+      '  ◯ general-purpose  Adversarial review of panel mock'
+    ]
+    const dialog = [
+      ' Bash command · from the general-purpose agent',
+      ' │ rm -f ./.rv-shot.mjs; node shot.mjs',
+      ' │ Dangerous rm operation not ruled out — the shell may read this command differently than it was parsed',
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      '   2. No',
+      ' Esc to cancel · Tab to amend · ctrl+x ctrl+k twice to stop background agents'
+    ]
+    const screens = [idle, idle, dialog]
+    const stops = terminal(ctx, current, {
+      readScreen: async () => screen(screens.shift() ?? dialog)
+    })
+    current.row = hookRow({
+      agentType: 'claude',
+      state: 'waiting',
+      stateStartedAt: 300
+    })
+    stops.observe(moved('working', 'needs-you'))
+    await vi.waitFor(() => expect(ctx.mail()).toHaveLength(1))
+    expect(ctx.mail()[0].body).toContain('Do you want to proceed?')
+  })
 })
 
 describe('chat worker turn stops', () => {
@@ -225,10 +345,15 @@ describe('chat worker turn stops', () => {
   function chatWithTimers(ctx: ReturnType<typeof setup>) {
     const timers: (() => void)[] = []
     const status = 'idle' as const
-    const report = chatWorkerTurnStopReporter(ctx.deps, (run) => timers.push(run))
+    const report = chatWorkerTurnStopReporter(ctx.deps, (run) => {
+      timers.push(run)
+    })
     return {
       finish: (turnId: string) =>
-        report(completion('success', turnId), () => ({ status, lastAssistantMessage: 'Done.' })),
+        report.onTurnAttention(completion('success', turnId), () => ({
+          status,
+          lastAssistantMessage: 'Done.'
+        })),
       runTimers: () => {
         for (const run of timers.splice(0)) {
           run()
@@ -251,5 +376,25 @@ describe('chat worker turn stops', () => {
     expect(ctx.mail()).toMatchObject([
       { subject: 'Worker stopped without reporting', payload: expect.stringContaining(followUp) }
     ])
+  })
+  it('reports every idle stop after a write, though the write landed before the last report', () => {
+    const ctx = setup(formatOrcaSessionAddress(CHAT_SESSION))
+    const chat = chatWithTimers(ctx)
+    chat.finish('turn-1')
+    // The coordinator's write lands in the quiet window, before the stop is reported.
+    writeAndTake(ctx)
+    chat.runTimers()
+    chat.finish('turn-2')
+    chat.runTimers()
+    expect(ctx.mail()).toHaveLength(2)
+    writeAndTake(ctx)
+    chat.finish('turn-3')
+    chat.runTimers()
+    // Idle again with no new write: already told.
+    chat.finish('turn-4')
+    chat.runTimers()
+    expect(ctx.mail().map((m) => m.subject)).toEqual(
+      Array(3).fill('Worker stopped without reporting')
+    )
   })
 })

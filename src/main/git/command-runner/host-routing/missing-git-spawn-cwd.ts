@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
-import { isDefinitiveAbsence } from '../../../../shared/definitive-filesystem-absence'
-import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
-import { isMissingCommandBinaryError } from '../../exec-error'
+import { isDefinitiveAbsence } from '../../../../shared/errors/definitive-filesystem-absence'
+import { waitForPromiseWithSignal } from '../../../../shared/concurrency/abort-signal-reason'
+import { isMissingCommandBinaryError } from '../process-capture/exec-error'
 
 const MAX_KNOWN_MISSING_CWDS = 256
 // Remember missing folders in memory to avoid a failing Git spawn on every sweep.

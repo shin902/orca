@@ -8,8 +8,8 @@ import {
   isGhRateLimitProbe,
   notifyGhPrimaryRateLimit,
   type GhRateLimitBucket
-} from '../../gh-rate-limit-breaker'
-import { extractExecError, parseRetryAfterMs } from '../../exec-error'
+} from './gh-rate-limit-breaker'
+import { extractExecError, parseRetryAfterMs } from '../process-capture/exec-error'
 import { resolveCommand, type ResolvedCommand } from '../host-routing/wsl-command-resolution'
 import { resolveDefaultWslCliFallback } from './default-wsl-cli-fallback'
 import {
@@ -53,7 +53,9 @@ export type GhExecOptions = Omit<GitExecOptions, 'cwd' | 'stdin'> & {
 function nonInteractiveGhEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   return {
     ...env,
-    GH_PROMPT_DISABLED: env.GH_PROMPT_DISABLED ?? '1'
+    GH_PROMPT_DISABLED: env.GH_PROMPT_DISABLED ?? '1',
+    // Why: gh 2.91-2.92 detach `gh send-telemetry` without a console, so its tzutil child flashes a window on Windows.
+    GH_TELEMETRY: env.GH_TELEMETRY ?? 'false'
   }
 }
 
@@ -186,6 +188,8 @@ export async function ghExecFileWithScopeAsync(
       if (availability) {
         await availability
       }
+      // gh holds no mutation fence, so a lost worker ends its lifetime as a termination does.
+      const reportChildEnded = lifetime?.capture()
       // gh may be a shim chain; terminate the whole tree so descendants cannot outlive the deadline.
       const { stdout, stderr } = await execFileCaptureToTermination(
         resolved.binary,
@@ -198,7 +202,8 @@ export async function ghExecFileWithScopeAsync(
           env: nonInteractiveGhEnv(boundEnv ?? options.env),
           signal: options.signal,
           stdin: options.stdin,
-          onChildTerminated: lifetime?.capture(),
+          onChildTerminated: reportChildEnded,
+          workerLossEndsLifetime: true,
           onDeadlineKill: () => logHostedCliDeadlineKill('gh', resolved.binary, args, timeoutMs)
         },
         resolved.termination

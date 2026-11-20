@@ -1,4 +1,4 @@
-import { AntigravityChatAuthConfigError } from '../../shared/antigravity-chat-auth-config'
+import { AntigravityChatAuthConfigError } from '../../shared/agent-accounts/antigravity/antigravity-chat-auth-config'
 import { AcpAgentError } from '../acp/transport/acp-errors'
 import '../native-chat/agent-session-wire/providers/structured-agent-session-adapter'
 import { isAgentSessionPreSpawnError } from '../native-chat/agent-session-wire/providers/structured-agent-session-adapter-errors'
@@ -20,6 +20,9 @@ export function antigravitySignInFailure(error: unknown): string {
   if (error instanceof AcpAgentError) {
     // Provider errors may put the reason in data instead of message.
     const text = `${error.message} ${JSON.stringify(error.data ?? '')}`
+    if (/GEMINI_API_KEY environment variable is not set/i.test(text)) {
+      return 'Antigravity found no GEMINI_API_KEY. Set it in your shell or in Antigravity’s environment variables in Orca, then try again.'
+    }
     if (text.includes('SUBSCRIPTION_REQUIRED')) {
       return 'Google requires an eligible Antigravity subscription for this account.'
     }

@@ -7,6 +7,7 @@ import { agentSessionFailureWords } from '../../../../shared/agent-session/failu
 import type { AgentSessionDispatchOutcome } from '../../../native-chat/agent-session-wire/providers/structured-agent-session-adapter'
 import type { JsonlRpcRecord } from '../../../jsonl-rpc/peer'
 import { piRpcPromptReplySchema } from '../rpc-protocol'
+import { PI_RPC_PEER_OPTIONS } from './rpc-prompt'
 
 type Submission = {
   id: string
@@ -22,7 +23,7 @@ type DeliveryDeps = {
   send: (frame: JsonlRpcRecord) => Promise<void>
   accepted: (id: string, at: number) => void
   commandOnly: () => void
-  rejectedAfterAcceptance: (error: string) => void
+  rejectedAfterAcceptance: (fact: SubmissionRejectionFact) => void
   settled: (id: string, outcome: AgentSessionDispatchOutcome) => void
   failed: (error: Error) => void
   beforeWrite?: () => void
@@ -58,7 +59,10 @@ function piHttpErrorStatus(error: string): number | undefined {
   return status === undefined ? undefined : Number(status)
 }
 
-export function piRpcFailureFact(error: string) {
+export function piRpcFailureFact<K extends 'providerRejected' | 'providerResponseFailed'>(
+  error: string,
+  fallback: K
+) {
   const signInRequired =
     error.startsWith(MISSING_KEY_PREFIX) ||
     (error.startsWith('Authentication failed for ') && error.includes("Run '/login ")) ||
@@ -67,7 +71,7 @@ export function piRpcFailureFact(error: string) {
         hasExpiredRefreshToken(error) ||
         (/\b401\b/.test(error) && !TEMPORARY_OAUTH_FAILURE.test(error))
       : piHttpErrorStatus(error) === 401)
-  return agentSessionFailureFact(signInRequired ? 'notSignedIn' : 'providerRejected', {
+  return agentSessionFailureFact(signInRequired ? 'notSignedIn' : fallback, {
     detail: providerDiagnostic(error, signInRequired ? 'log' : 'person')
   })
 }
@@ -101,7 +105,10 @@ export class PiRpcPromptDelivery {
       throw new Error('Pi prompt queue unavailable')
     }
     const bytes = Buffer.byteLength(JSON.stringify(frame))
-    if (this.pending.size >= 128 || this.heldBytes + bytes > 32 * 1024 * 1024) {
+    if (
+      this.pending.size >= 128 ||
+      this.heldBytes + bytes > PI_RPC_PEER_OPTIONS.maxQueuedWriteBytes
+    ) {
       return {
         state: 'rejected',
         ...agentSessionFailureWords(agentSessionFailureFact('queueFull'), {
@@ -147,7 +154,7 @@ export class PiRpcPromptDelivery {
     }
     if (!reply.success) {
       const error = reply.error ?? 'Pi rejected the prompt'
-      const fact = piRpcFailureFact(error)
+      const fact = piRpcFailureFact(error, 'providerRejected')
       if (
         !submission.accepted &&
         error.startsWith(MISSING_KEY_PREFIX) &&
@@ -186,7 +193,7 @@ export class PiRpcPromptDelivery {
           : fact
       this.deps.settled(submission.id, piRejection(settledFact))
       if (submission.accepted) {
-        this.deps.rejectedAfterAcceptance(error)
+        this.deps.rejectedAfterAcceptance(fact)
       } else {
         this.deps.refused?.()
       }
@@ -211,7 +218,10 @@ export class PiRpcPromptDelivery {
       if (submission.signInRefusal !== undefined) {
         this.deps.settled(
           submission.id,
-          piRejection({ ...piRpcFailureFact(submission.signInRefusal), neverReachedAgent: true })
+          piRejection({
+            ...piRpcFailureFact(submission.signInRefusal, 'providerRejected'),
+            neverReachedAgent: true
+          })
         )
       } else if (!submission.accepted) {
         this.deps.settled(submission.id, {

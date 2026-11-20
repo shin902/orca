@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { redactString } from '../../../../observability/redactor'
+import { redactString } from '../../../../../shared/observability/redactor'
 import type { OrchestrationDb } from '../../db/orchestration-db'
 import { dispatchReportMailbox } from '../reports/dispatch-report-mailbox'
 import { readCoordinatorMailCount } from '../../db/messages/dispatch-read-mail'
@@ -11,7 +11,12 @@ import type {
 import { escalateWorkerFailure } from '../reports/worker-failure-escalation'
 import { replaceDispatchCapabilities } from '../../terminal-authority/views/worker-terminal-redaction'
 import type { WorkerApprovalPayload } from '../../../../../shared/orchestration/approvals/worker-approval-payload'
-import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../../../shared/orca-session-address-prefix'
+import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../../../shared/agent-session/identity/orca-session-address-prefix'
+import {
+  describeApprovalClosed,
+  describeCoordinatorAnswer,
+  describeHelperHold
+} from './worker-approval-text'
 
 // One screenful: enough to show the agent's last words or error banner without flooding the inbox.
 const LAST_OUTPUT_MAX_CHARS = 2_000
@@ -21,9 +26,11 @@ export type WorkerTurnStopReason = 'finished' | 'errored' | 'needs-input' | 'exi
 export type WorkerTurnStop = {
   /** The worker's own mailbox identity: terminal handle, chat address or structured worker handle. */
   from: string
-  /** Identifies this stop; a later turn's stop has a new one, so each stop is reported once. An idle finish is keyed by the coordinator's latest mail instead, and a worker goes away only once. */
+  /** Identifies this stop; a later turn's stop has a new one, so each stop is reported once. An idle finish is keyed by the coordinator's latest mail instead, and a worker without one goes away only once. */
   stopKey?: string
   reason: WorkerTurnStopReason
+  /** Coordinator mail the worker had taken when the stop was seen; mail it takes later is its next turn's. */
+  mailTaken?: number
   lastOutput: string | undefined
   /** For `needs-input`: the turn ended asking for a reply, which a message answers; else a prompt does. */
   awaitsReply?: boolean
@@ -33,6 +40,8 @@ export type WorkerTurnStop = {
   turnStartedAt?: number
   /** Why the worker went away, for an `exited` or `lost` stop. */
   cause?: string
+  /** An exited chat: mail starts it again, keeping its history. */
+  restartsOnMail?: true
   /** What the worker left behind, such as the workspace of a start that failed. */
   leftover?: string
   /** A start that never got a terminal has no output to read. */
@@ -52,6 +61,8 @@ export type WorkerTurnStopReportDeps = {
   notify: (handle: string, messageType: string) => void
   /** Whether a mailbox reaches a chat coordinator, whose user sees the approval card; unknown reads as no. */
   isChatMailbox?: (mailbox: string) => boolean
+  /** Whether the user lets coordinator agents allow this machine's workers' prompts; unknown reads as no. */
+  coordinatorApprovals?: () => boolean
 }
 
 export function workerTurnStopDispatchId(target: WorkerTurnStopDispatch): string {
@@ -66,7 +77,7 @@ const SUBJECTS: Record<WorkerTurnStopReason, string> = {
   lost: 'Worker lost without reporting'
 }
 
-/** The worker can no longer run: an exit or loss is never deliberate and happens once per Dispatch. */
+/** The worker went away: never deliberate, and once per Dispatch unless the stop names which exit it was. */
 function isWorkerGone(reason: WorkerTurnStopReason): boolean {
   return reason === 'exited' || reason === 'lost'
 }
@@ -78,6 +89,8 @@ type StopContext = {
   dispatchId: string
   chatCoordinator?: boolean
   taskReady?: boolean
+  /** The user lets the coordinator allow this machine's workers' prompts. */
+  coordinatorApprovals?: boolean
 }
 
 function describeStop(stop: WorkerTurnStop, context: StopContext): string {
@@ -87,7 +100,12 @@ function describeStop(stop: WorkerTurnStop, context: StopContext): string {
   // Failure text (a remote selector, a URL) can also carry credentials.
   const redactFailure = (text: string | undefined) =>
     text && redactString(replaceDispatchCapabilities(text).value)
-  const cause = redactFailure(stop.cause)
+  const fullCause = redactFailure(stop.cause)
+  // A provider's stderr can be long; its end names the failure.
+  const cause =
+    fullCause && fullCause.length > LAST_OUTPUT_MAX_CHARS
+      ? `…${fullCause.slice(-LAST_OUTPUT_MAX_CHARS)}`
+      : fullCause
   const leftover = redactFailure(stop.leftover)
   const what =
     stop.reason === 'needs-input'
@@ -126,7 +144,7 @@ function describeStop(stop: WorkerTurnStop, context: StopContext): string {
 // The reader runs its own CLI build, so name the subcommand, never an executable.
 function describeNextStep(
   stop: WorkerTurnStop,
-  { taskId, dispatchId, chatCoordinator, taskReady }: StopContext
+  { taskId, dispatchId, chatCoordinator, taskReady, coordinatorApprovals }: StopContext
 ): string[] {
   if (stop.settled === 'circuit_broken') {
     return [
@@ -140,6 +158,11 @@ function describeNextStep(
       `Its Dispatch is closed as failed. Start it again with your Orca CLI's \`${start}\` and the same placement and agent, or tell the user.`
     ]
   }
+  if (stop.restartsOnMail) {
+    return [
+      `The Dispatch is still open and its chat keeps its history. A message restarts it: your Orca CLI's \`orchestration send --to dispatch:${dispatchId} --subject "<topic>" --body "<guidance>"\`. Or stop the worker, then retry it or tell the user.`
+    ]
+  }
   if (isWorkerGone(stop.reason)) {
     return ['Stop the worker, then retry it or tell the user.']
   }
@@ -147,15 +170,26 @@ function describeNextStep(
     const { summary, approvalId, allowedActions } = stop.approval
     const where = stop.from.startsWith(ORCA_SESSION_ADDRESS_PREFIX) ? 'chat' : 'terminal'
     const shown = allowedActions.map((action) => (action === 'allow' ? 'Allow' : 'Deny')).join('/')
-    return [
+    const given = [
       ...(summary.detail ? [summary.detail] : []),
-      ...(summary.reason ? [`Reason given: ${summary.reason}`] : []),
+      ...(summary.reason ? [`Reason given: ${summary.reason}`] : [])
+    ]
+    if (coordinatorApprovals) {
+      return [
+        ...given,
+        ...describeCoordinatorAnswer(stop.approval, { dispatchId, chatCoordinator })
+      ]
+    }
+    return [
+      ...given,
       `${
-        chatCoordinator
-          ? `The user has been shown ${shown} in your chat in Orca.`
-          : where === 'chat'
-            ? `Your chat has no approval card for it; only the worker's own chat in Orca shows it. Tell the user that worker ${stop.from} is waiting for permission in its chat.`
-            : `No one has been shown this prompt in Orca. Tell the user that worker ${stop.from} is waiting for permission in its terminal.`
+        stop.approval.fromHelper
+          ? describeHelperHold(chatCoordinator)
+          : chatCoordinator
+            ? `The user has been shown ${shown} in your chat in Orca.`
+            : where === 'chat'
+              ? `Your chat has no approval card for it; only the worker's own chat in Orca shows it. Tell the user that worker ${stop.from} is waiting for permission in its chat.`
+              : `No one has been shown this prompt in Orca. Tell the user that worker ${stop.from} is waiting for permission in its terminal.`
       } Don't block on it: carry on with other work. You'll get a message when it's answered. Don't message this worker until then.`,
       allowedActions.includes('deny')
         ? `If this is holding up the task, deny it with a reason so the worker continues another way: \`orchestration deny --dispatch ${dispatchId} --prompt ${approvalId} --reason "<what to do instead>"\`.`
@@ -172,13 +206,14 @@ function describeNextStep(
   ]
 }
 
-/** Tell the coordinator once that a worker is at rest or gone without reporting; never settles its Dispatch. */
+/** Tell the coordinator once that a worker is at rest or gone without reporting; never settles its Dispatch.
+ *  True when the report is in the coordinator's mail. */
 export function reportWorkerTurnStop(
   db: OrchestrationDb,
   target: WorkerTurnStopDispatch,
   stop: WorkerTurnStop,
   deps: WorkerTurnStopReportDeps
-): void {
+): boolean {
   const dispatchId = workerTurnStopDispatchId(target)
   // Waiting on mail, or a clean finish resting on its own question or helpers, is deliberate; going away never is.
   if (
@@ -189,7 +224,7 @@ export function reportWorkerTurnStop(
           rejectedReportInTurn(db, dispatchId, stop.turnStartedAt) ||
           (target.kind === 'local' && db.hasOpenHelperDispatch(dispatchId)))))
   ) {
-    return
+    return false
   }
   // An idle finish answers the coordinator's mail the worker took, so it is news once per mail taken: a later
   // idle turn (a worker on its own schedule, or one the user is talking to) repeats what the coordinator was told.
@@ -197,9 +232,9 @@ export function reportWorkerTurnStop(
   const stopKey = stop.approval
     ? `approval:${stop.approval.approvalId}`
     : stop.reason === 'finished'
-      ? `finished:${readCoordinatorMailCount(db, dispatchId)}`
+      ? `finished:${stop.mailTaken ?? readCoordinatorMailCount(db, dispatchId)}`
       : isWorkerGone(stop.reason)
-        ? 'gone'
+        ? (stop.stopKey ?? 'gone')
         : (stop.stopKey ?? stop.reason)
   const id = stopReportId(dispatchId, stopKey)
   const subject = stop.approval ? 'Worker is waiting for permission' : SUBJECTS[stop.reason]
@@ -225,20 +260,22 @@ export function reportWorkerTurnStop(
             taskId: dispatch.task_id,
             dispatchId: dispatch.id,
             chatCoordinator: deps.isChatMailbox?.(dispatchReportMailbox(db, dispatch)) === true,
-            taskReady: db.getTask(dispatch.task_id)?.status === 'ready'
+            taskReady: db.getTask(dispatch.task_id)?.status === 'ready',
+            coordinatorApprovals: deps.coordinatorApprovals?.() === true
           })
         }),
         payload: { taskId: dispatch.task_id, ...payload }
       },
       deps.notify
     )
-    return
+    // Stored is sent: a failed wake or an earlier send of this stop still reached the mailbox.
+    return db.getMessageById(id) !== undefined
   }
   // The Run home imports relayed worker mail into the coordinator's Run and wakes it.
   const { attachment } = target
   // A worker_done the home has not acknowledged yet is still a report.
   if (db.hasPendingFederatedWorkerReport(dispatchId)) {
-    return
+    return false
   }
   // The stable message id makes a repeated report of the same stop a no-op on both sides.
   try {
@@ -253,7 +290,8 @@ export function reportWorkerTurnStop(
         body: describeStop(stop, {
           task: attachment.task_id,
           taskId: attachment.task_id,
-          dispatchId
+          dispatchId,
+          coordinatorApprovals: deps.coordinatorApprovals?.() === true
         }),
         type: 'escalation',
         priority: 'high',
@@ -262,8 +300,10 @@ export function reportWorkerTurnStop(
         payload: JSON.stringify({ taskId: attachment.task_id, ...payload })
       })
     })
+    return true
   } catch (error) {
     console.warn('[orchestration] failed to relay a worker stop report', dispatchId, error)
+    return false
   }
 }
 
@@ -273,39 +313,6 @@ export function stopReportId(dispatchId: string, stopKey: string): string {
     .update(JSON.stringify([dispatchId, stopKey]))
     .digest('hex')
     .slice(0, 24)}`
-}
-
-const CLOSED_BY: Record<NonNullable<WorkerApprovalPayload['outcome']>['by'], string> = {
-  person: 'by a person in Orca',
-  coordinator: 'by the coordinator',
-  'worker-chat': "in the worker's own chat",
-  'worker-terminal': "in the worker's terminal",
-  auto: "by the worker's agent on its own (its 2:00 timeout)",
-  'terminal-only': "for Orca; a person must answer it in the worker's terminal",
-  'worker-ended': 'because its worker ended',
-  unknown: 'without an answer Orca can name'
-}
-
-function describeApprovalClosed(approval: WorkerApprovalPayload): string {
-  const { outcome, approvalId, worker } = approval
-  const decision =
-    outcome?.decision === 'allow' ? 'Allowed' : outcome?.decision === 'deny' ? 'Denied' : 'Closed'
-  return [
-    `${decision} ${CLOSED_BY[outcome?.by ?? 'unknown']}: approval ${approvalId} of worker ${worker.handle} (${approval.summary.title}).`,
-    ...(outcome?.reason
-      ? [
-          `Reason: ${outcome.reason}`,
-          ...(outcome.reasonDelivered
-            ? []
-            : [
-                "This agent's prompt takes no message, so the reason was sent to the worker as mail."
-              ])
-        ]
-      : []),
-    outcome?.by === 'terminal-only'
-      ? "Tell the user to answer it in the worker's terminal."
-      : 'Nothing to do unless the worker stays stuck.'
-  ].join('\n')
 }
 
 /** The one closing line for a reported approval; the same stable id makes a second closer a no-op. */
