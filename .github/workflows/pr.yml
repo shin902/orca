@@ -336,7 +336,7 @@ jobs:
           PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
           # Review the fork delta, not unchanged code imported from the stable release.
-          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && 'c91a7a6ee3dc76090cafb33943961ae2235246d6' || '' }}
+          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && '903c91e80fbe7bbcaffe6ac767c49eac91e98a64' || '' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
           node config/scripts/preflight/changed-checks/check-changed-code-quality.mjs "${{ github.event.pull_request.base.sha }}"
@@ -345,7 +345,7 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         env:
           # Review the fork delta, not unchanged code imported from the stable release.
-          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && 'c91a7a6ee3dc76090cafb33943961ae2235246d6' || '' }}
+          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && '903c91e80fbe7bbcaffe6ac767c49eac91e98a64' || '' }}
         run: |
           if [ -n "$ORCA_REACT_DOCTOR_BASE" ]; then
             git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_REACT_DOCTOR_BASE"
@@ -1045,7 +1045,7 @@ jobs:
     timeout-minutes: 180
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
-      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.258
+      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.266
 
     steps:
       # Fetch tags/full history for newest-release skew; shallow unit shards cannot supply it.
