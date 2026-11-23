@@ -71,7 +71,7 @@
 1 src/main/startup/main-window/synthetic-title-runtime.ts
 1 src/main/telemetry/wsl-usage-reporter.ts
 1 src/main/webhooks/webhook-recovery-sweep.ts
-1 src/main/window/theme-daemon-client.ts # WebSocket heartbeat with stop (clearInterval on close); fork-carried file absent from upstream v1.4.266 baseline
+1 src/main/window/theme-daemon-client.ts # WebSocket heartbeat with stop (clearInterval on close); fork-carried file absent from upstream v1.4.272 baseline
 1 src/main/wsl/orcad/wsl-orcad-connect-stop-fence.ts
 1 src/renderer/src/app-shell/storage/use-app-session-persistence.ts
 1 src/renderer/src/components/bots/google/google-account-readiness.ts
