@@ -183,7 +183,7 @@ export function createMainWindow(
   })
   const disposeDesktopBackground = installDesktopBackground(
     mainWindow,
-    store,
+    nativeSettings,
     settings?.backgroundMode === 'transparent'
   )
   rememberWindowMaterial(mainWindow, windowMaterial)
