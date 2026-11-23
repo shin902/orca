@@ -402,12 +402,21 @@ jobs:
         background: true
         env:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+          # Review the fork delta, not unchanged code imported from the stable release.
+          ORCA_CODE_QUALITY_BASE: ${{ github.repository != 'stablyai/orca' && '6272306c5a5a59ed1c6b604896610bfadde180cc' || '' }}
         run: |
           if [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
           node config/scripts/preflight/changed-checks/check-changed-code-quality.mjs "${{ github.event.pull_request.base.sha }}"
 
       - name: Enforce React Doctor on changed lines
-        run: node config/scripts/static-analysis/react-doctor/check-react-doctor-changed.mjs "${{ github.event.pull_request.base.sha }}"
+        env:
+          # Review the fork delta, not unchanged code imported from the stable release.
+          ORCA_REACT_DOCTOR_BASE: ${{ github.repository != 'stablyai/orca' && '6272306c5a5a59ed1c6b604896610bfadde180cc' || '' }}
+        run: |
+          if [ -n "$ORCA_REACT_DOCTOR_BASE" ]; then
+            git fetch --no-tags --depth=1 https://github.com/stablyai/orca.git "$ORCA_REACT_DOCTOR_BASE"
+          fi
+          node config/scripts/static-analysis/react-doctor/check-react-doctor-changed.mjs "${{ github.event.pull_request.base.sha }}"
 
       - wait: changed-code-quality
 
@@ -758,6 +767,9 @@ jobs:
     # Why ARM: source-only: tagged checkout plus in-process vitest, no docker or browser.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_CROSS_VERSION_BASELINE_REF: v1.4.272
 
     steps:
       # Fetch tags/full history for newest-release skew; shallow unit shards cannot supply it.
@@ -768,6 +780,31 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+
+      # Forks do not inherit upstream tags; fetch only the releases this harness compares.
+      - name: Fetch official compatibility releases
+        run: |
+          git fetch --no-tags --filter=blob:none https://github.com/stablyai/orca.git \
+            "refs/tags/$ORCA_CROSS_VERSION_BASELINE_REF:refs/tags/$ORCA_CROSS_VERSION_BASELINE_REF" \
+            refs/tags/v1.4.184:refs/tags/v1.4.184 \
+            refs/tags/v1.4.190:refs/tags/v1.4.190 \
+            refs/tags/v1.4.199:refs/tags/v1.4.199 \
+            refs/tags/v1.4.205:refs/tags/v1.4.205 \
+            refs/tags/v1.4.211:refs/tags/v1.4.211 \
+            refs/tags/v1.4.212:refs/tags/v1.4.212 \
+            refs/tags/v1.4.214:refs/tags/v1.4.214 \
+            refs/tags/v1.4.218:refs/tags/v1.4.218 \
+            refs/tags/v1.4.219:refs/tags/v1.4.219 \
+            refs/tags/v1.4.220:refs/tags/v1.4.220 \
+            refs/tags/v1.4.221:refs/tags/v1.4.221 \
+            refs/tags/v1.4.222:refs/tags/v1.4.222 \
+            refs/tags/v1.4.224:refs/tags/v1.4.224 \
+            refs/tags/v1.4.228:refs/tags/v1.4.228 \
+            refs/tags/v1.4.229:refs/tags/v1.4.229 \
+            refs/tags/v1.4.244:refs/tags/v1.4.244 \
+            refs/tags/v1.4.245:refs/tags/v1.4.245 \
+            refs/tags/v1.4.249:refs/tags/v1.4.249 \
+            refs/tags/v1.4.253:refs/tags/v1.4.253
 
       - uses: ./.github/actions/install-node-dependencies
         with:
