@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { DurablePushStore, DELIVERY_LEASE_MS } from './durable-push-store.js'
 import {
   cleanupDurablePushFixtures,
+  DEVICE_HEAD_SQL,
   fixture,
-  notification
+  notification,
+  pauseAfter,
+  within
 } from './durable-push-store.test-fixture.js'
 
 afterEach(cleanupDurablePushFixtures)
@@ -124,4 +127,22 @@ it('does not resurrect an in-flight alert after a dismissal and transient provid
   advance(1000)
   expect(await store.claim()).toBeNull()
   expect(await store.pendingCount('phone')).toBe(0)
+})
+
+describe('durable push claim fixture isolation', () => {
+  it('isolates device-scope locks held by unrelated fixtures', async () => {
+    const first = await fixture()
+    const second = await fixture()
+    await first.store.accept('host', 'phone', notification(1))
+    await second.store.accept('host', 'phone', notification(2))
+    const paused = pauseAfter(first.db, DEVICE_HEAD_SQL)
+    const holding = new DurablePushStore(paused.wrapped, first.clock).claim()
+    await paused.atCandidate
+    try {
+      expect((await within(second.store.claim(), 2_000))?.notification.notificationSeq).toBe(2)
+    } finally {
+      paused.release()
+      await holding
+    }
+  })
 })
