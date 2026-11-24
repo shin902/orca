@@ -4,7 +4,7 @@ import {
   type BrowserWindowConstructorOptions,
   type IpcMainEvent
 } from 'electron'
-import type { Store } from '../persistence/loading-store/store'
+import type { NativeSettingsProjection } from '../core-desktop/native-settings-projection'
 import { DEFAULT_DESKTOP_BACKGROUND, resolveBackgroundMode } from '../../shared/desktop-background'
 import { connectThemeDaemon } from './theme-daemon-client'
 
@@ -21,7 +21,7 @@ export function desktopBackgroundWindowOptions(mode: unknown): BrowserWindowCons
 
 export function installDesktopBackground(
   window: BrowserWindow,
-  store: Store | null,
+  nativeSettings: NativeSettingsProjection | null,
   nativeTransparency: boolean
 ): () => void {
   let snapshot = { ...DEFAULT_DESKTOP_BACKGROUND, nativeTransparency }
@@ -34,7 +34,7 @@ export function installDesktopBackground(
     }
   }
   const reconcile = (): void => {
-    const enabled = resolveBackgroundMode(store?.getSettings().backgroundMode) !== 'solid'
+    const enabled = resolveBackgroundMode(nativeSettings?.getSettings().backgroundMode) !== 'solid'
     if (enabled && !stop) {
       stop = connectThemeDaemon((update) => {
         const next = { ...snapshot, ...update }
@@ -61,7 +61,7 @@ export function installDesktopBackground(
     }
     if (!subscribed) {
       subscribed = true
-      unsubscribe = store?.onSettingsChanged(reconcile)
+      unsubscribe = nativeSettings?.onSettingsChanged(reconcile)
       reconcile()
     }
     publish()

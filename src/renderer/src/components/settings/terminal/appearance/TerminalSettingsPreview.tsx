@@ -8,7 +8,7 @@ import { buildDefaultTerminalOptions } from '@/lib/pane-manager/pane-terminal-op
 import { buildFontFamily } from '../../../../../../shared/styles/monospace-font-family'
 import {
   pluginFontFamilyWhenLoaded,
-  usePluginFontReady
+  usePluginFontLoadKey
 } from '@/store/plugins/appearance/plugin-fonts'
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/appearance/terminal-appearance'
 import {
@@ -74,7 +74,7 @@ export function TerminalSettingsPreview({
   const skipInitialThemeRewriteRef = useRef(false)
 
   const effectiveFontFamily = previewFontFamily || settings.terminalFontFamily
-  const fontReady = usePluginFontReady(effectiveFontFamily)
+  const fontLoadKey = usePluginFontLoadKey(effectiveFontFamily)
   const terminalLineHeight = normalizeTerminalLineHeight(settings.terminalLineHeight)
   const backgroundOpacity = resolveTerminalBackgroundOpacity(settings)
 
@@ -201,7 +201,7 @@ export function TerminalSettingsPreview({
     settings.terminalFontSize,
     settings.terminalFontWeightBold,
     effectiveFontFamily,
-    fontReady,
+    fontLoadKey,
     settings.terminalFontWeight,
     terminalLineHeight,
     settings.terminalCursorStyle,
